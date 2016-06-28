@@ -25,6 +25,7 @@
     <UseCommonOutputDirectory>true</UseCommonOutputDirectory>
     <ProjectSystemLayer>VisualStudio</ProjectSystemLayer>
   </PropertyGroup>
+
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
@@ -88,11 +89,13 @@
   <ItemGroup>
     <None Include="project.json" />
     <None Include="source.extension.vsixmanifest">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToOutputDirectory>Do not Copy</CopyToOutputDirectory>
     </None>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="ProvideBindingRedirectionAttribute.cs" />
+    <Compile Include="..\Common\ProvideBindingRedirectionAttribute.cs">
+      <Link>ProvideBindingRedirectionAttribute.cs</Link>
+    </Compile>
     <Compile Include="AssemblyRedirects.cs" />
   </ItemGroup>
   <Import Project="..\..\build\Targets\VSL.Imports.targets" />
