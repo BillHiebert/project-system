@@ -58,8 +58,8 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.Web
             DIRPRJ_E_NOTFOUND_IISEXPRESS_ACCESSDENIED_IIS = unchecked((int)0x80040408),
             DIRPRJ_E_ASPNETNOTREGISTERED = unchecked((int)0x80040405),
             DV_E_FORMATETC = unchecked((int)0x80040064),
-            WEBSERVER_E_NOTRUNNING = unchecked((int)0x80040600);    
-      }
+            WEBSERVER_E_NOTRUNNING = unchecked((int)0x80040600);
+    }
 
     [ComImport()]
     [Guid("97A96122-0634-4ca3-9EB2-6AA127723EE5")]
@@ -84,7 +84,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.Web
         [PreserveSig]
         int AddServerBinding(
             [In][MarshalAs(UnmanagedType.LPWStr)] string pszHostHeader,
-            [In] [MarshalAs(UnmanagedType.U2)] short uPort,
+            [In][MarshalAs(UnmanagedType.U2)] short uPort,
             [In][MarshalAs(UnmanagedType.VariantBool)] bool addSecureBinding,
             [Out][MarshalAs(UnmanagedType.BStr)] out string bstrSecureUrl); // The resulting url
 
@@ -92,75 +92,75 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.Web
         int RemoveServerBinding(
             [In][MarshalAs(UnmanagedType.LPWStr)] string pszHostHeader,
             [In][MarshalAs(UnmanagedType.VariantBool)] bool isSecureBinding,
-            [In] [MarshalAs(UnmanagedType.U2)] short uPort);
+            [In][MarshalAs(UnmanagedType.U2)] short uPort);
 
         [PreserveSig]
         int GetApplicationPipelineMode(
             [In][MarshalAs(UnmanagedType.LPWStr)] string pszRelativeUrl,
-            [Out] [MarshalAs(UnmanagedType.U4)] out ManagedPipelineMode mode);
+            [Out][MarshalAs(UnmanagedType.U4)] out ManagedPipelineMode mode);
 
         [PreserveSig]
         int SetApplicationPipelineMode(
             [In][MarshalAs(UnmanagedType.LPWStr)] string pszRelativeUrl,
-            [In] [MarshalAs(UnmanagedType.U4)] ManagedPipelineMode mode);
+            [In][MarshalAs(UnmanagedType.U4)] ManagedPipelineMode mode);
 
         [PreserveSig]
         int GetAuthentication(
             [In][MarshalAs(UnmanagedType.LPWStr)] string pszRelativeUrl,
-            [Out] [MarshalAs(UnmanagedType.U4)] out IISAuthentications curAuthModes,
-            [Out] [MarshalAs(UnmanagedType.U4)] out IISAuthentications validAuthModeMask);    // Indicates which ones are valid in case some are unknown
+            [Out][MarshalAs(UnmanagedType.U4)] out IISAuthentications curAuthModes,
+            [Out][MarshalAs(UnmanagedType.U4)] out IISAuthentications validAuthModeMask);    // Indicates which ones are valid in case some are unknown
 
         [PreserveSig]
         int SetAuthentication(
             [In][MarshalAs(UnmanagedType.LPWStr)] string pszRelativeUrl,
-            [In] [MarshalAs(UnmanagedType.U4)] IISAuthentications authModesToSet,
-            [In] [MarshalAs(UnmanagedType.U4)] IISAuthentications authModesMask,
-            [Out] [MarshalAs(UnmanagedType.U4)] out IISAuthentications newAuthModes,
-            [Out] [MarshalAs(UnmanagedType.U4)] out IISAuthentications validNewAuthModeMask);    // Indicates which ones are valid in case some are unknown
+            [In][MarshalAs(UnmanagedType.U4)] IISAuthentications authModesToSet,
+            [In][MarshalAs(UnmanagedType.U4)] IISAuthentications authModesMask,
+            [Out][MarshalAs(UnmanagedType.U4)] out IISAuthentications newAuthModes,
+            [Out][MarshalAs(UnmanagedType.U4)] out IISAuthentications validNewAuthModeMask);    // Indicates which ones are valid in case some are unknown
 
         [PreserveSig]
         int GetMetabasePathForRelativeUrl(
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszRelativeUrl,
-            [In] [MarshalAs(UnmanagedType.VariantBool)] bool fIncludeLM,
-            [Out] [MarshalAs(UnmanagedType.BStr)] out string metabasePath);
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszRelativeUrl,
+            [In][MarshalAs(UnmanagedType.VariantBool)] bool fIncludeLM,
+            [Out][MarshalAs(UnmanagedType.BStr)] out string metabasePath);
 
         [PreserveSig]
         int GetUrlMatchingPath(
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszUrl,
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszDiskPath,
-            [Out] [MarshalAs(UnmanagedType.BStr)] out string bstrMatchingUrl);
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszUrl,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszDiskPath,
+            [Out][MarshalAs(UnmanagedType.BStr)] out string bstrMatchingUrl);
 
         [PreserveSig]
         int GetScriptMapInfo(
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszRelUrl,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszRelUrl,
             [Out][MarshalAs(UnmanagedType.BStr)] out string pbstrVersion,
             [In][Out][MarshalAs(UnmanagedType.I4)] ref ScriptMapInfo pScriptMapInfo);
 
         [PreserveSig]
         int UpdateScriptMaps(
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszRelUrl,
-            [In] [MarshalAs(UnmanagedType.I4)] uint dwTgtMajorVersion,
-            [In] [MarshalAs(UnmanagedType.I4)] uint dwTgtMinorVersion,
-            [In] [MarshalAs(UnmanagedType.Bool)] bool isUpgrade);
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszRelUrl,
+            [In][MarshalAs(UnmanagedType.I4)] uint dwTgtMajorVersion,
+            [In][MarshalAs(UnmanagedType.I4)] uint dwTgtMinorVersion,
+            [In][MarshalAs(UnmanagedType.Bool)] bool isUpgrade);
 
         [PreserveSig]
         int GetApplicationPoolIdentity(
-           [In] [MarshalAs(UnmanagedType.LPWStr)] string pszRelUrl,
-           [Out] [MarshalAs(UnmanagedType.BStr)] out string pbstrApplicationPoolIdentity);
+           [In][MarshalAs(UnmanagedType.LPWStr)] string pszRelUrl,
+           [Out][MarshalAs(UnmanagedType.BStr)] out string pbstrApplicationPoolIdentity);
 
         [PreserveSig]
         int EnableLoadUserProfile(
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszRelUrl);
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszRelUrl);
 
         [PreserveSig]
         int CreateVirtualDirectory(
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszRelUrl,
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszDiskPath,
-            [In] [MarshalAs(UnmanagedType.Bool)] bool overwriteExisting);
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszRelUrl,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszDiskPath,
+            [In][MarshalAs(UnmanagedType.Bool)] bool overwriteExisting);
 
         [PreserveSig]
         int GetSiteDisplayName(
-           [Out] [MarshalAs(UnmanagedType.BStr)] out string pbstrSiteName);
+           [Out][MarshalAs(UnmanagedType.BStr)] out string pbstrSiteName);
     };
 
     [ComImport()]
@@ -176,20 +176,20 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.Web
 
         [PreserveSig]
         int IsUrlHostedInIIsOrIISExpress(
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszUrl,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszUrl,
             [Out][MarshalAs(UnmanagedType.VariantBool)] out bool pIsHostedOnIIS,
             [Out][MarshalAs(UnmanagedType.VariantBool)] out bool pIsHostedOnIISExpress);
 
         [PreserveSig]
         int GetRunningIISExpressProcessForSite(
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszUrl,
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszConfigPath,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszUrl,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszConfigPath,
             [Out][MarshalAs(UnmanagedType.U4)] out uint pdwPid);
 
         [PreserveSig]
         int GetIISExpressCommandLineForSite(
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszUrl,
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszConfigPath,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszUrl,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszConfigPath,
             [Out][MarshalAs(UnmanagedType.BStr)] out string pbstrCommandLine);
 
         [PreserveSig]
@@ -198,26 +198,26 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.Web
 
         [PreserveSig]
         int OpenIISSite(
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszLocalUrl,
-            [In] [MarshalAs(UnmanagedType.VariantBool)] bool bPreferIISExpress,
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string? pszConfigPath,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszLocalUrl,
+            [In][MarshalAs(UnmanagedType.VariantBool)] bool bPreferIISExpress,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string? pszConfigPath,
             [Out][MarshalAs(UnmanagedType.Interface)] out IVsIISSite vsIISSite);
 
         [PreserveSig]
         int CreateNewIISSite(
-            [In] [MarshalAs(UnmanagedType.VariantBool)] bool bCreateOnIISExpress,
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszSiteName,
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszDiskPath,
-            [In] [MarshalAs(UnmanagedType.U2)] ushort dwPort,
-            [In] [MarshalAs(UnmanagedType.VariantBool)] bool bAddSecureBindings,
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszConfigPath,
+            [In][MarshalAs(UnmanagedType.VariantBool)] bool bCreateOnIISExpress,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszSiteName,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszDiskPath,
+            [In][MarshalAs(UnmanagedType.U2)] ushort dwPort,
+            [In][MarshalAs(UnmanagedType.VariantBool)] bool bAddSecureBindings,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszConfigPath,
             [Out][MarshalAs(UnmanagedType.Interface)] out IVsIISSite vsIISSite);
 
         [PreserveSig]
         int GetUniqueNewSiteName(
-            [In] [MarshalAs(UnmanagedType.VariantBool)] bool bCreateOnIISExpress,
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszSuggestedSiteName,
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszConfigPath,
+            [In][MarshalAs(UnmanagedType.VariantBool)] bool bCreateOnIISExpress,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszSuggestedSiteName,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszConfigPath,
             [Out][MarshalAs(UnmanagedType.BStr)] out string bstrUniqueName);
 
         [PreserveSig]
@@ -230,13 +230,13 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.Web
 
         [PreserveSig]
         int GetIISExpressApplicationHostFilePath(
-            [Out] [MarshalAs(UnmanagedType.BStr)] out string appHostConfigPath);
+            [Out][MarshalAs(UnmanagedType.BStr)] out string appHostConfigPath);
 
         [PreserveSig]
         int GetApplicationUrlOfDiskPath(
-            [In] [MarshalAs(UnmanagedType.VariantBool)] bool bCheckIISExpress,
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszDiskPath,
-            [Out] [MarshalAs(UnmanagedType.BStr)] out string applicationUrl);
+            [In][MarshalAs(UnmanagedType.VariantBool)] bool bCheckIISExpress,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszDiskPath,
+            [Out][MarshalAs(UnmanagedType.BStr)] out string applicationUrl);
     };
 
     [ComImport()]
@@ -249,12 +249,12 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.Web
 
         [PreserveSig]
         int GetRunningIISExpressProcessForSite(
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszUrl,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszUrl,
             [Out][MarshalAs(UnmanagedType.U4)] out uint pdwPid);
 
         [PreserveSig]
         int GetIISExpressCommandLineForSite(
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszUrl,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszUrl,
             [Out][MarshalAs(UnmanagedType.BStr)] out string pbstrCommandLine);
 
         [PreserveSig]
@@ -263,20 +263,20 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.Web
 
         [PreserveSig]
         int OpenIISSite(
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszLocalUrl,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszLocalUrl,
             [Out][MarshalAs(UnmanagedType.Interface)] out IVsIISSite vsIISSite);
 
         [PreserveSig]
         int CreateNewIISSite(
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszSiteName,
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string? pszDiskPath,
-            [In] [MarshalAs(UnmanagedType.U2)] ushort dwPort,
-            [In] [MarshalAs(UnmanagedType.VariantBool)] bool bAddSecureBindings,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszSiteName,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string? pszDiskPath,
+            [In][MarshalAs(UnmanagedType.U2)] ushort dwPort,
+            [In][MarshalAs(UnmanagedType.VariantBool)] bool bAddSecureBindings,
             [Out][MarshalAs(UnmanagedType.Interface)] out IVsIISSite vsIISSite);
 
         [PreserveSig]
         int GetUniqueNewSiteName(
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszSuggestedSiteName,
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszSuggestedSiteName,
             [Out][MarshalAs(UnmanagedType.BStr)] out string bstrUniqueName);
 
         [PreserveSig]
@@ -288,12 +288,12 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.Web
 
         [PreserveSig]
         int GetIISExpressApplicationHostFilePath(
-            [Out] [MarshalAs(UnmanagedType.BStr)] out string appHostConfigPath);
+            [Out][MarshalAs(UnmanagedType.BStr)] out string appHostConfigPath);
 
         [PreserveSig]
         int GetApplicationUrlOfDiskPath(
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string pszDiskPath,
-            [Out] [MarshalAs(UnmanagedType.BStr)] out string applicationUrl);
+            [In][MarshalAs(UnmanagedType.LPWStr)] string pszDiskPath,
+            [Out][MarshalAs(UnmanagedType.BStr)] out string applicationUrl);
     }
 
     [ComImport()]
@@ -303,12 +303,12 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.Web
     {
         [PreserveSig]
         int GetIISExpressServiceForConfigFile(
-            [In] [MarshalAs(UnmanagedType.LPWStr)] string? pszPathToApplicationHostConfig, 
-            [Out] [MarshalAs(UnmanagedType.Interface)] out IVsIISExpressService  ppIISExpressSvc);
+            [In][MarshalAs(UnmanagedType.LPWStr)] string? pszPathToApplicationHostConfig,
+            [Out][MarshalAs(UnmanagedType.Interface)] out IVsIISExpressService ppIISExpressSvc);
 
         [PreserveSig]
         int GetDefaultConfigFileForSolution(
-            [Out] [MarshalAs(UnmanagedType.BStr)] out string strPathToApplicationHostConfig);
+            [Out][MarshalAs(UnmanagedType.BStr)] out string strPathToApplicationHostConfig);
     }
 
     [ComImport()]
@@ -332,6 +332,6 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.Web
 
         [PreserveSig]
         int UnadviseIISServiceEvents(
-            [In] uint  dwAdviseCookie);
+            [In] uint dwAdviseCookie);
     }
 }
