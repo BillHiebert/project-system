@@ -55,6 +55,21 @@
         <target state="translated">Autenticazione di Windows</target>
         <note />
       </trans-unit>
+      <trans-unit id="latest">
+        <source>latest</source>
+        <target state="translated">più recente</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="none">
+        <source>none</source>
+        <target state="translated">nessuno</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="preview">
+        <source>preview</source>
+        <target state="translated">anteprima</target>
+        <note />
+      </trans-unit>
     </body>
   </file>
 </xliff>

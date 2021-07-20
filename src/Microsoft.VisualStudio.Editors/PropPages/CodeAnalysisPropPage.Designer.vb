@@ -101,6 +101,7 @@ Namespace Microsoft.VisualStudio.Editors.PropertyPages
             Me.AnalysisLevelComboBox.FormattingEnabled = True
             resources.ApplyResources(Me.AnalysisLevelComboBox, "AnalysisLevelComboBox")
             Me.AnalysisLevelComboBox.Name = "AnalysisLevelComboBox"
+            Me.AnalysisLevelComboBox.AccessibleName = Me.AnalysisLevelLabel.Text
             '
             'RunAnalyzersDuringLiveAnalysis
             '
@@ -148,13 +149,13 @@ Namespace Microsoft.VisualStudio.Editors.PropertyPages
 
         End Sub
 
-        Friend WithEvents AnalysisLevelComboBox As Windows.Forms.ComboBox
-        Friend WithEvents AnalysisLevelLabel As Windows.Forms.Label
-        Friend WithEvents EnableNETAnalyzersCheckBox As Windows.Forms.CheckBox
-        Friend WithEvents Label1 As Windows.Forms.Label
-        Friend WithEvents Label2 As Windows.Forms.Label
-        Friend WithEvents NETAnalyzersLinkLabel As Windows.Forms.LinkLabel
-        Friend WithEvents EnforceCodeStyleInBuildCheckBox As Windows.Forms.CheckBox
+        Friend WithEvents AnalysisLevelComboBox As System.Windows.Forms.ComboBox
+        Friend WithEvents AnalysisLevelLabel As System.Windows.Forms.Label
+        Friend WithEvents EnableNETAnalyzersCheckBox As System.Windows.Forms.CheckBox
+        Friend WithEvents Label1 As System.Windows.Forms.Label
+        Friend WithEvents Label2 As System.Windows.Forms.Label
+        Friend WithEvents NETAnalyzersLinkLabel As System.Windows.Forms.LinkLabel
+        Friend WithEvents EnforceCodeStyleInBuildCheckBox As System.Windows.Forms.CheckBox
     End Class
 
 End Namespace

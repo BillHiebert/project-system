@@ -3,10 +3,8 @@
 using System.Collections.Immutable;
 using System.ComponentModel.Composition;
 using Microsoft.VisualStudio.Imaging;
-using Microsoft.VisualStudio.Imaging.Interop;
 using Microsoft.VisualStudio.ProjectSystem.Tree.Dependencies.CrossTarget;
 using Microsoft.VisualStudio.ProjectSystem.Tree.Dependencies.Models;
-using Microsoft.VisualStudio.ProjectSystem.VS;
 using Microsoft.VisualStudio.ProjectSystem.VS.Tree.Dependencies;
 
 namespace Microsoft.VisualStudio.ProjectSystem.Tree.Dependencies.Subscriptions.RuleHandlers
@@ -24,8 +22,10 @@ namespace Microsoft.VisualStudio.ProjectSystem.Tree.Dependencies.Subscriptions.R
             new DependencyIconSet(
                 icon: KnownMonikers.CodeInformation,
                 expandedIcon: KnownMonikers.CodeInformation,
-                unresolvedIcon: ManagedImageMonikers.CodeInformationWarning,
-                unresolvedExpandedIcon: ManagedImageMonikers.CodeInformationWarning),
+                unresolvedIcon: KnownMonikers.CodeInformationWarning,
+                unresolvedExpandedIcon: KnownMonikers.CodeInformationWarning,
+                implicitIcon: KnownMonikers.CodeInformationPrivate,
+                implicitExpandedIcon: KnownMonikers.CodeInformationPrivate),
             DependencyTreeFlags.AnalyzerDependencyGroup);
 
         public AnalyzerRuleHandler()
@@ -35,7 +35,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.Tree.Dependencies.Subscriptions.R
 
         public override string ProviderType => ProviderTypeString;
 
-        public override ImageMoniker ImplicitIcon => ManagedImageMonikers.CodeInformationPrivate;
+        public override ProjectTreeFlags GroupNodeFlag => DependencyTreeFlags.AnalyzerDependencyGroup;
 
         protected override bool ResolvedItemRequiresEvaluatedItem => false;
 

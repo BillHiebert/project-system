@@ -45,9 +45,11 @@ namespace Microsoft.VisualStudio.ProjectSystem.Properties
 
         public override async Task<string?> OnSetPropertyValueAsync(string propertyName, string unevaluatedPropertyValue, IProjectProperties defaultProperties, IReadOnlyDictionary<string, string>? dimensionalConditions = null)
         {
-            ILaunchSettings launchSettings = await _launchSettingsProvider.WaitForFirstSnapshot(Timeout.Infinite);
+            // Infinite timeout means this will not actually be null.
+            ILaunchSettings? launchSettings = await _launchSettingsProvider.WaitForFirstSnapshot(Timeout.Infinite);
+            Assumes.NotNull(launchSettings);
 
-            var writableLaunchSettings = launchSettings.ToWritableLaunchSettings();
+            IWritableLaunchSettings writableLaunchSettings = launchSettings.ToWritableLaunchSettings();
             if (SetPropertyValue(propertyName, unevaluatedPropertyValue, writableLaunchSettings))
             {
                 await _launchSettingsProvider.UpdateAndSaveSettingsAsync(writableLaunchSettings.ToLaunchSettings());
@@ -61,7 +63,9 @@ namespace Microsoft.VisualStudio.ProjectSystem.Properties
 
         private async Task<string> GetPropertyValueAsync(string propertyName)
         {
-            ILaunchSettings launchSettings = await _launchSettingsProvider.WaitForFirstSnapshot(Timeout.Infinite);
+            // Infinite timeout means this will not actually be null.
+            ILaunchSettings? launchSettings = await _launchSettingsProvider.WaitForFirstSnapshot(Timeout.Infinite);
+            Assumes.NotNull(launchSettings);
 
             return GetPropertyValue(propertyName, launchSettings) ?? string.Empty;
         }
@@ -72,7 +76,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.Properties
         /// </summary>
         /// <returns>
         /// The value of the property if it is found in the <paramref name="launchSettings"/>;
-        /// otherwise a default value or <c>null</c> if there is no applicable default.
+        /// otherwise a default value or <see langword="null"/> if there is no applicable default.
         /// </returns>
         /// <exception cref="InvalidOperationException">
         /// Thrown if the given <paramref name="propertyName"/> is not known (that is, it is

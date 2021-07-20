@@ -55,6 +55,21 @@
         <target state="translated">Authentification Windows</target>
         <note />
       </trans-unit>
+      <trans-unit id="latest">
+        <source>latest</source>
+        <target state="translated">dernière</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="none">
+        <source>none</source>
+        <target state="translated">aucun</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="preview">
+        <source>preview</source>
+        <target state="translated">préversion</target>
+        <note />
+      </trans-unit>
     </body>
   </file>
 </xliff>

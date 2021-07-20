@@ -49,6 +49,10 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
 
             // NOTE most of these mocks are only present to prevent NREs in Initialize
 
+            var inputDataSource = new Mock<IUpToDateCheckConfiguredInputDataSource>();
+            inputDataSource.SetupGet(o => o.SourceBlock)
+                .Returns(DataflowBlockSlim.CreateBroadcastBlock<IProjectVersionedValue<UpToDateCheckConfiguredInput>>());
+
             // Enable "Info" log level, as we assert logged messages in tests
             var projectSystemOptions = new Mock<IProjectSystemOptions>();
             projectSystemOptions.Setup(o => o.GetFastUpToDateLoggingLevelAsync(It.IsAny<CancellationToken>()))
@@ -87,15 +91,12 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
             _fileSystem.AddFolder(_msBuildProjectDirectory);
             _fileSystem.AddFolder(_outputPath);
 
-            var threadingService = IProjectThreadingServiceFactory.Create();
-
             _buildUpToDateCheck = new BuildUpToDateCheck(
+                inputDataSource.Object,
                 projectSystemOptions.Object,
                 configuredProject.Object,
                 projectAsynchronousTasksService.Object,
-                IProjectItemSchemaServiceFactory.Create(),
                 ITelemetryServiceFactory.Create(telemetryParameters => _telemetryEvents.Add(telemetryParameters)),
-                threadingService,
                 _fileSystem);
         }
 
@@ -104,9 +105,12 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
         private async Task SetupAsync(
             Dictionary<string, IProjectRuleSnapshotModel>? projectSnapshot = null,
             Dictionary<string, IProjectRuleSnapshotModel>? sourceSnapshot = null,
-            IEnumerable<(string FilePath, DateTime Time)>? dependentTimeFiles = null)
+            IEnumerable<(string FilePath, DateTime Time)>? dependentTimeFiles = null,
+            DateTime? lastCheckTimeAtUtc = null,
+            DateTime? lastItemsChangedAtUtc = null,
+            DateTime? lastAdditionalDependentFileTimesChangedAtUtc = null)
         {
-            await _buildUpToDateCheck.LoadAsync();
+            await _buildUpToDateCheck.ActivateAsync();
 
             BroadcastChange(
                 projectRuleSnapshot: projectSnapshot,
@@ -116,12 +120,19 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                     : dependentTimeFiles.ToImmutableDictionary(
                         item => item.FilePath,
                         item => item.Time,
-                        StringComparers.Paths));
+                        StringComparers.Paths),
+                lastItemsChangedAtUtc: lastItemsChangedAtUtc,
+                lastAdditionalDependentFileTimesChangedAtUtc: lastAdditionalDependentFileTimesChangedAtUtc);
 
             // Flush the first false
             await AssertNotUpToDateAsync(
                 "The up-to-date check has not yet run for this project. Not up-to-date.",
                 "FirstRun");
+
+            if (lastCheckTimeAtUtc != null)
+            {
+                _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTimeAtUtc.Value);
+            }
         }
 
         private void BroadcastChange(
@@ -129,7 +140,10 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
             Dictionary<string, IProjectRuleSnapshotModel>? sourceRuleSnapshot = null,
             bool disableFastUpToDateCheck = false,
             IImmutableDictionary<string, DateTime>? dependentTimeFiles = null,
-            string outDir = _outputPath)
+            string outDir = _outputPath,
+            DateTime? lastCheckTimeAtUtc = null,
+            DateTime? lastItemsChangedAtUtc = null,
+            DateTime? lastAdditionalDependentFileTimesChangedAtUtc = null)
         {
             projectRuleSnapshot ??= new Dictionary<string, IProjectRuleSnapshotModel>();
 
@@ -147,17 +161,36 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 };
             }
 
-            var value = IProjectVersionedValueFactory.Create(
-                ValueTuple.Create(
-                    CreateUpdate(projectRuleSnapshot),
-                    CreateUpdate(sourceRuleSnapshot),
-                    (IProjectSnapshot)IProjectSnapshot2Factory.Create(dependentTimeFiles),
-                    IProjectItemSchemaFactory.Create(_itemTypes),
-                    IProjectCatalogSnapshotFactory.CreateWithDefaultMapping(_itemTypes)),
-                identity: ProjectDataSources.ConfiguredProjectVersion,
-                version: _projectVersion);
+            var priorState = _buildUpToDateCheck.TestAccess.State?.ImplicitInputs[0] ?? UpToDateCheckImplicitConfiguredInput.Empty;
 
-            _buildUpToDateCheck.OnChanged(value);
+            var configuredInput = priorState.Update(
+                CreateUpdate(projectRuleSnapshot),
+                CreateUpdate(sourceRuleSnapshot),
+                IProjectSnapshot2Factory.Create(dependentTimeFiles),
+                IProjectItemSchemaFactory.Create(_itemTypes),
+                IProjectCatalogSnapshotFactory.CreateWithDefaultMapping(_itemTypes),
+                _projectVersion);
+
+            if (lastItemsChangedAtUtc != null)
+            {
+                configuredInput = configuredInput.WithLastItemsChangedAtUtc(lastItemsChangedAtUtc.Value);
+            }
+
+            if (lastAdditionalDependentFileTimesChangedAtUtc != null)
+            {
+                configuredInput = configuredInput.WithLastAdditionalDependentFilesChangedAtUtc(lastAdditionalDependentFileTimesChangedAtUtc.Value);
+            }
+
+            var input = new UpToDateCheckConfiguredInput(ImmutableArray.Create(configuredInput));
+
+            var dataSourceVersions = ImmutableDictionary<NamedIdentity, IComparable>.Empty.Add(ProjectDataSources.ConfiguredProjectVersion, _projectVersion);
+
+            _buildUpToDateCheck.TestAccess.OnChanged(new ProjectVersionedValue<UpToDateCheckConfiguredInput>(input, dataSourceVersions));
+
+            if (lastCheckTimeAtUtc != null)
+            {
+                _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTimeAtUtc.Value);
+            }
 
             return;
 
@@ -202,6 +235,18 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 Items = ImmutableStringDictionary<IImmutableDictionary<string, string>>.EmptyOrdinal.Add(
                     itemSpec,
                     ImmutableStringDictionary<string>.EmptyOrdinal.Add(metadataName, metadataValue))
+            };
+        }
+
+        private static IProjectRuleSnapshotModel ItemsWithMetadata(params (string itemSpec, string metadataName, string metadataValue)[] items)
+        {
+            return new IProjectRuleSnapshotModel
+            {
+                Items = ImmutableStringDictionary<IImmutableDictionary<string, string>>.EmptyOrdinal.AddRange(
+                    items.Select(
+                        item => new KeyValuePair<string, IImmutableDictionary<string, string>>(
+                            item.itemSpec,
+                            ImmutableStringDictionary<string>.EmptyOrdinal.Add(item.metadataName, item.metadataValue))))
             };
         }
 
@@ -301,18 +346,25 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 [Content.SchemaName] = SimpleItems("ItemPath1", "ItemPath2")
             };
 
-            await SetupAsync(projectSnapshot, sourceSnapshot);
-
             var outputTime      = DateTime.UtcNow.AddMinutes(-3);
             var lastCheckTime   = DateTime.UtcNow.AddMinutes(-2);
             var itemChangedTime = DateTime.UtcNow.AddMinutes(-1);
 
+            await SetupAsync(
+                projectSnapshot,
+                sourceSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangedTime);
+
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\BuiltOutputPath1", outputTime);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangedTime);
 
             await AssertNotUpToDateAsync(
-                $"The set of project items was changed more recently ({itemChangedTime.ToLocalTime()}) than the earliest output 'C:\\Dev\\Solution\\Project\\BuiltOutputPath1' ({outputTime.ToLocalTime()}), not up to date.",
+                new[]
+                {
+                    $"The set of project items was changed more recently ({itemChangedTime.ToLocalTime()}) than the earliest output 'C:\\Dev\\Solution\\Project\\BuiltOutputPath1' ({outputTime.ToLocalTime()}), not up to date.",
+                    "    Content item added 'ItemPath1' (CopyType=CopyNever)",
+                    "    Content item added 'ItemPath2' (CopyType=CopyNever)",
+                },
                 "Outputs");
         }
 
@@ -381,15 +433,17 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 [Compile.SchemaName] = SimpleItems("ItemPath1")
             };
 
-            await SetupAsync(projectSnapshot, sourceSnapshot);
-
             var itemChangedTime = DateTime.UtcNow.AddMinutes(-3);
             var outputTime      = DateTime.UtcNow.AddMinutes(-2);
             var lastCheckTime   = DateTime.UtcNow.AddMinutes(-1);
 
+            await SetupAsync(
+                projectSnapshot,
+                sourceSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangedTime);
+
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\BuiltOutputPath1", outputTime);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangedTime);
 
             await AssertNotUpToDateAsync(
                 "Input 'C:\\Dev\\Solution\\Project\\ItemPath1' does not exist and is required, not up to date.",
@@ -409,17 +463,19 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 [Compile.SchemaName] = SimpleItems("ItemPath1")
             };
 
-            await SetupAsync(projectSnapshot, sourceSnapshot);
-
             var itemChangedTime = DateTime.UtcNow.AddMinutes(-4);
             var outputTime      = DateTime.UtcNow.AddMinutes(-3);
             var inputTime       = DateTime.UtcNow.AddMinutes(-2);
             var lastCheckTime   = DateTime.UtcNow.AddMinutes(-1);
 
+            await SetupAsync(
+                projectSnapshot,
+                sourceSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangedTime);
+
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\BuiltOutputPath1", outputTime);
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\ItemPath1", inputTime);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangedTime);
 
             await AssertNotUpToDateAsync(
                 $"Input 'C:\\Dev\\Solution\\Project\\ItemPath1' is newer ({inputTime.ToLocalTime()}) than earliest output 'C:\\Dev\\Solution\\Project\\BuiltOutputPath1' ({outputTime.ToLocalTime()}), not up to date.",
@@ -476,7 +532,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
 
             // Run check again (t4)
             await AssertNotUpToDateAsync(
-                $"Input 'C:\\Dev\\Solution\\Project\\ItemPath1' ({t2.ToLocalTime()}) has been modified since the last up-to-date check ({_buildUpToDateCheck.TestAccess.State.LastCheckedAtUtc.ToLocalTime()}), not up to date.",
+                $"Input 'C:\\Dev\\Solution\\Project\\ItemPath1' ({t2.ToLocalTime()}) has been modified since the last up-to-date check ({_buildUpToDateCheck.TestAccess.GetLastCheckedAtUtc().ToLocalTime()}), not up to date.",
                 "Outputs");
         }
 
@@ -504,24 +560,26 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 [Compile.SchemaName] = SimpleItems("ItemPath1", "ItemPath2")
             };
 
-            await _buildUpToDateCheck.LoadAsync();
+            await _buildUpToDateCheck.ActivateAsync();
 
-            Assert.Equal(DateTime.MinValue, _buildUpToDateCheck.TestAccess.State.LastItemsChangedAtUtc);
+            Assert.Null(_buildUpToDateCheck.TestAccess.State);
 
             // Initial change does NOT set LastItemsChangedAtUtc
             BroadcastChange(projectSnapshot, sourceSnapshot1);
 
-            Assert.Equal(DateTime.MinValue, _buildUpToDateCheck.TestAccess.State.LastItemsChangedAtUtc);
+            Assert.NotNull(_buildUpToDateCheck.TestAccess.State);
+
+            Assert.Equal(DateTime.MinValue, _buildUpToDateCheck.TestAccess.State!.ImplicitInputs.Single().LastItemsChangedAtUtc);
 
             // Broadcasting an update with no change to items does NOT set LastItemsChangedAtUtc
             BroadcastChange();
 
-            Assert.Equal(DateTime.MinValue, _buildUpToDateCheck.TestAccess.State.LastItemsChangedAtUtc);
+            Assert.Equal(DateTime.MinValue, _buildUpToDateCheck.TestAccess.State.ImplicitInputs.Single().LastItemsChangedAtUtc);
 
             // Broadcasting changed items DOES set LastItemsChangedAtUtc
             BroadcastChange(projectSnapshot, sourceSnapshot2);
 
-            Assert.NotEqual(DateTime.MinValue, _buildUpToDateCheck.TestAccess.State.LastItemsChangedAtUtc);
+            Assert.NotEqual(DateTime.MinValue, _buildUpToDateCheck.TestAccess.State.ImplicitInputs.Single().LastItemsChangedAtUtc);
         }
 
         [Fact]
@@ -537,17 +595,19 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 [Compile.SchemaName] = SimpleItems("ItemPath1")
             };
 
-            await SetupAsync(projectSnapshot, sourceSnapshot);
-
             var itemChangeTime  = DateTime.UtcNow.AddMinutes(-4);
             var outputTime      = DateTime.UtcNow.AddMinutes(-3);
             var compileItemTime = DateTime.UtcNow.AddMinutes(-2);
             var lastCheckTime   = DateTime.UtcNow.AddMinutes(-1);
 
+            await SetupAsync(
+                projectSnapshot,
+                sourceSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime);
+
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\CustomOutputPath1", outputTime);
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\ItemPath1", compileItemTime);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangeTime);
 
             await AssertNotUpToDateAsync(
                 $"Input 'C:\\Dev\\Solution\\Project\\ItemPath1' is newer ({compileItemTime.ToLocalTime()}) than earliest output 'C:\\Dev\\Solution\\Project\\CustomOutputPath1' ({outputTime.ToLocalTime()}), not up to date.",
@@ -602,20 +662,21 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 [ResolvedAnalyzerReference.SchemaName] = ItemWithMetadata("Analyzer1", "ResolvedPath", "Analyzer1ResolvedPath")
             };
 
-            await SetupAsync(projectSnapshot);
-
             var itemChangeTime = DateTime.UtcNow.AddMinutes(-4);
             var outputTime     = DateTime.UtcNow.AddMinutes(-3);
             var inputTime      = DateTime.UtcNow.AddMinutes(-2);
             var lastCheckTime  = DateTime.UtcNow.AddMinutes(-1);
+
+            await SetupAsync(
+                projectSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime);
 
             var outputItem = "C:\\Dev\\Solution\\Project\\BuiltOutputPath1";
             var analyzerItem = "C:\\Dev\\Solution\\Project\\Analyzer1ResolvedPath";
 
             _fileSystem.AddFile(outputItem, outputTime);
             _fileSystem.AddFile(analyzerItem, inputTime);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangeTime);
 
             await AssertNotUpToDateAsync(
                 $"Input '{analyzerItem}' is newer ({inputTime.ToLocalTime()}) than earliest output '{outputItem}' ({outputTime.ToLocalTime()}), not up to date.",
@@ -633,25 +694,26 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                     Items = ImmutableStringDictionary<IImmutableDictionary<string, string>>.EmptyOrdinal
                         .Add("Reference1", ImmutableStringDictionary<string>.EmptyOrdinal
                             .Add("CopyUpToDateMarker", "Reference1MarkerPath")
-                            .Add("ResolvedPath", "Reference1ResolvedPath")
-                            .Add("OriginalPath", "Reference1OriginalPath"))
+                            .Add("ResolvedPath", "C:\\Dev\\Solution\\Project\\Reference1ResolvedPath")
+                            .Add("OriginalPath", "..\\Project\\Reference1OriginalPath"))
                 }
             };
-
-            await SetupAsync(projectSnapshot);
 
             var itemChangeTime = DateTime.UtcNow.AddMinutes(-4);
             var lastCheckTime  = DateTime.UtcNow.AddMinutes(-3);
             var outputTime     = DateTime.UtcNow.AddMinutes(-2);
             var inputTime      = DateTime.UtcNow.AddMinutes(-1);
 
+            await SetupAsync(
+                projectSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime);
+
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\BuiltOutputPath1", outputTime);
-            _fileSystem.AddFile("Reference1ResolvedPath", inputTime);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangeTime);
+            _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Reference1ResolvedPath", inputTime);
 
             await AssertNotUpToDateAsync(
-                $"Input 'Reference1ResolvedPath' is newer ({inputTime.ToLocalTime()}) than earliest output 'C:\\Dev\\Solution\\Project\\BuiltOutputPath1' ({outputTime.ToLocalTime()}), not up to date.",
+                $"Input 'C:\\Dev\\Solution\\Project\\Reference1ResolvedPath' is newer ({inputTime.ToLocalTime()}) than earliest output 'C:\\Dev\\Solution\\Project\\BuiltOutputPath1' ({outputTime.ToLocalTime()}), not up to date.",
                 "Outputs");
         }
 
@@ -664,18 +726,19 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 [UpToDateCheckInput.SchemaName] = SimpleItems("Item1", "Item2")
             };
 
-            await SetupAsync(projectSnapshot);
-
             var itemChangeTime = DateTime.UtcNow.AddMinutes(-4);
             var lastCheckTime  = DateTime.UtcNow.AddMinutes(-3);
             var outputTime     = DateTime.UtcNow.AddMinutes(-2);
             var inputTime      = DateTime.UtcNow.AddMinutes(-1);
 
+            await SetupAsync(
+                projectSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime);
+
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\BuiltOutputPath1", outputTime);
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Item1", inputTime);
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Item2", outputTime);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangeTime);
 
             await AssertNotUpToDateAsync(
                 $"Input 'C:\\Dev\\Solution\\Project\\Item1' is newer ({inputTime.ToLocalTime()}) than earliest output 'C:\\Dev\\Solution\\Project\\BuiltOutputPath1' ({outputTime.ToLocalTime()}), not up to date.",
@@ -692,18 +755,19 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 [UpToDateCheckOutput.SchemaName] = ItemWithMetadata("Output1", "Set", "Set1")
             };
 
-            await SetupAsync(projectSnapshot);
-
             var itemChangeTime = DateTime.UtcNow.AddMinutes(-4);
             var lastCheckTime  = DateTime.UtcNow.AddMinutes(-3);
             var outputTime     = DateTime.UtcNow.AddMinutes(-2);
             var inputTime      = DateTime.UtcNow.AddMinutes(-1);
 
+            await SetupAsync(
+                projectSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime);
+
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Input1", inputTime);
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Output1", outputTime);
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\BuildDefault", outputTime);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangeTime);
 
             await AssertNotUpToDateAsync(
                 new[]
@@ -724,8 +788,6 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 [UpToDateCheckOutput.SchemaName] = Union(ItemWithMetadata("Output1", "Set", "Set1"), ItemWithMetadata("Output2", "Set", "Set2"))
             };
 
-            await SetupAsync(projectSnapshot);
-
             var itemChangeTime = DateTime.UtcNow.AddMinutes(-6);
             var inputTime1     = DateTime.UtcNow.AddMinutes(-5);
             var outputTime1    = DateTime.UtcNow.AddMinutes(-4);
@@ -733,13 +795,16 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
             var outputTime2    = DateTime.UtcNow.AddMinutes(-2);
             var lastCheckTime  = DateTime.UtcNow.AddMinutes(-1);
 
+            await SetupAsync(
+                projectSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime);
+
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Input1", inputTime1);
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Output1", outputTime1);
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Input2", inputTime2);
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Output2", outputTime2);
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\BuildDefault", outputTime1);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangeTime);
 
             await AssertUpToDateAsync(
                 $"No inputs are newer than earliest output 'C:\\Dev\\Solution\\Project\\BuildDefault' ({outputTime1.ToLocalTime()}).",
@@ -757,8 +822,6 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 [UpToDateCheckOutput.SchemaName] = Union(ItemWithMetadata("Output1", "Set", "Set1"), ItemWithMetadata("Output2", "Set", "Set2"))
             };
 
-            await SetupAsync(projectSnapshot);
-
             var itemChangeTime = DateTime.UtcNow.AddMinutes(-6);
             var inputTime1     = DateTime.UtcNow.AddMinutes(-5);
             var outputTime1    = DateTime.UtcNow.AddMinutes(-4);
@@ -766,13 +829,16 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
             var inputTime2     = DateTime.UtcNow.AddMinutes(-2);
             var lastCheckTime  = DateTime.UtcNow.AddMinutes(-1);
 
+            await SetupAsync(
+                projectSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime);
+
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Input1", inputTime1);
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Output1", outputTime1);
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Input2", inputTime2);
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Output2", outputTime2);
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\BuildDefault", outputTime1);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangeTime);
 
             await AssertNotUpToDateAsync(
                 new[]
@@ -794,20 +860,20 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 [UpToDateCheckOutput.SchemaName] = Union(ItemWithMetadata("Output1", "Set", "Set1"), ItemWithMetadata("Output2", "Set", "Set2"))
             };
 
-            await SetupAsync(projectSnapshot);
-
             var itemChangeTime = DateTime.UtcNow.AddMinutes(-5);
             var outputTime2    = DateTime.UtcNow.AddMinutes(-4);
             var inputTime      = DateTime.UtcNow.AddMinutes(-3);
             var outputTime1    = DateTime.UtcNow.AddMinutes(-2);
             var lastCheckTime  = DateTime.UtcNow.AddMinutes(-1);
+            await SetupAsync(
+                projectSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime);
 
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Input", inputTime);
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Output1", outputTime1);
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Output2", outputTime2);
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\BuildDefault", outputTime1);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangeTime);
 
             await AssertNotUpToDateAsync(
                 new[]
@@ -828,17 +894,18 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 [UpToDateCheckInput.SchemaName] = ItemWithMetadata("Input1", "Set", "Set1"),
             };
 
-            await SetupAsync(projectSnapshot);
-
             var itemChangeTime = DateTime.UtcNow.AddMinutes(-4);
             var lastCheckTime  = DateTime.UtcNow.AddMinutes(-3);
             var buildTime      = DateTime.UtcNow.AddMinutes(-2);
             var inputTime      = DateTime.UtcNow.AddMinutes(-1);
 
+            await SetupAsync(
+                projectSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime);
+
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Input1", inputTime);
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\BuildDefault", buildTime);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangeTime);
 
             await AssertUpToDateAsync(
                 $"No inputs are newer than earliest output 'C:\\Dev\\Solution\\Project\\BuildDefault' ({buildTime.ToLocalTime()}).",
@@ -854,20 +921,150 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 [UpToDateCheckOutput.SchemaName] = ItemWithMetadata("Output1", "Set", "Set1")
             };
 
-            await SetupAsync(projectSnapshot);
-
             var itemChangeTime = DateTime.UtcNow.AddMinutes(-3);
             var lastCheckTime  = DateTime.UtcNow.AddMinutes(-2);
             var outputTime     = DateTime.UtcNow.AddMinutes(-1);
 
+            await SetupAsync(
+                projectSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime);
+
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Output1", outputTime);
             _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\BuildDefault", outputTime);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangeTime);
 
             await AssertUpToDateAsync(
                 $"No inputs are newer than earliest output 'C:\\Dev\\Solution\\Project\\BuildDefault' ({outputTime.ToLocalTime()}).",
                 "No inputs defined in set 'Set1'.");
+        }
+
+        [Fact]
+        public async Task IsUpToDateAsync_False_Kinds_InputNewerThanOutput_WithIgnoredKind()
+        {
+            var projectSnapshot = new Dictionary<string, IProjectRuleSnapshotModel>
+            {
+                [UpToDateCheckBuilt.SchemaName] = ItemsWithMetadata(("Built", "Kind", ""), ("IgnoredBuilt", "Kind", "Ignored")),
+                [UpToDateCheckInput.SchemaName] = ItemsWithMetadata(("Input", "Kind", ""), ("IgnoredInput", "Kind", "Ignored")),
+                [UpToDateCheckOutput.SchemaName] = ItemsWithMetadata(("Output", "Kind", ""), ("IgnoredOutput", "Kind", "Ignored"))
+            };
+
+            var itemChangeTime = DateTime.UtcNow.AddMinutes(-4);
+            var lastCheckTime  = DateTime.UtcNow.AddMinutes(-3);
+            var outputTime     = DateTime.UtcNow.AddMinutes(-2);
+            var inputTime      = DateTime.UtcNow.AddMinutes(-1);
+
+            await SetupAsync(
+                projectSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime);
+
+            _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Input", inputTime);
+            _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Output", outputTime);
+            _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Built", outputTime);
+
+            await AssertNotUpToDateAsync(
+                $"Input 'C:\\Dev\\Solution\\Project\\Input' is newer ({inputTime.ToLocalTime()}) than earliest output 'C:\\Dev\\Solution\\Project\\Output' ({outputTime.ToLocalTime()}), not up to date.",
+                "Outputs",
+                ignoreKinds: "Ignored");
+        }
+
+        [Fact]
+        public async Task IsUpToDateAsync_False_Kinds_InputNewerThanOutput_NoKindIgnored()
+        {
+            var projectSnapshot = new Dictionary<string, IProjectRuleSnapshotModel>
+            {
+                [UpToDateCheckBuilt.SchemaName] = ItemsWithMetadata(("Built", "Kind", ""), ("TaggedBuilt", "Kind", "Tagged")),
+                [UpToDateCheckInput.SchemaName] = ItemsWithMetadata(("Input", "Kind", ""), ("TaggedInput", "Kind", "Tagged")),
+                [UpToDateCheckOutput.SchemaName] = ItemsWithMetadata(("Output", "Kind", ""), ("TaggedOutput", "Kind", "Tagged"))
+            };
+
+            var itemChangeTime = DateTime.UtcNow.AddMinutes(-6);
+            var input2Time     = DateTime.UtcNow.AddMinutes(-5);
+            var lastCheckTime  = DateTime.UtcNow.AddMinutes(-4);
+            var output1Time    = DateTime.UtcNow.AddMinutes(-3);
+            var output2Time    = DateTime.UtcNow.AddMinutes(-2);
+            var input1Time     = DateTime.UtcNow.AddMinutes(-1);
+
+            await SetupAsync(
+                projectSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime);
+
+            _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Input",        input1Time);
+            _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\TaggedInput",  input2Time);
+            _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Output",       output1Time);
+            _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\TaggedOutput", output2Time);
+            _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Built",        output1Time);
+            _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\TaggedBuilt",  output2Time);
+
+            await AssertNotUpToDateAsync(
+                $"Input 'C:\\Dev\\Solution\\Project\\Input' is newer ({input1Time.ToLocalTime()}) than earliest output 'C:\\Dev\\Solution\\Project\\Output' ({output1Time.ToLocalTime()}), not up to date.",
+                "Outputs",
+                ignoreKinds: "");
+        }
+
+        [Fact]
+        public async Task IsUpToDateAsync_True_Kinds_InputNewerThanOutput_WithIgnoredKind()
+        {
+            var projectSnapshot = new Dictionary<string, IProjectRuleSnapshotModel>
+            {
+                [UpToDateCheckBuilt.SchemaName] = ItemsWithMetadata(("Built", "Kind", ""), ("IgnoredBuilt", "Kind", "Ignored")),
+                [UpToDateCheckInput.SchemaName] = ItemsWithMetadata(("Input", "Kind", ""), ("IgnoredInput", "Kind", "Ignored")),
+                [UpToDateCheckOutput.SchemaName] = ItemsWithMetadata(("Output", "Kind", ""), ("IgnoredOutput", "Kind", "Ignored"))
+            };
+
+            var itemChangeTime = DateTime.UtcNow.AddMinutes(-4);
+            var inputTime      = DateTime.UtcNow.AddMinutes(-3);
+            var lastCheckTime  = DateTime.UtcNow.AddMinutes(-2);
+            var outputTime     = DateTime.UtcNow.AddMinutes(-1);
+
+            await SetupAsync(
+                projectSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime);
+
+            _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Input", inputTime);
+            _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Output", outputTime);
+            _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Built", outputTime);
+
+            await AssertUpToDateAsync(
+                new[] { $"No inputs are newer than earliest output 'C:\\Dev\\Solution\\Project\\Output' ({outputTime.ToLocalTime()})." },
+                ignoreKinds: "Ignored");
+        }
+
+        [Fact]
+        public async Task IsUpToDateAsync_True_Kinds_InputNewerThanOutput_NoKindIgnored()
+        {
+            var projectSnapshot = new Dictionary<string, IProjectRuleSnapshotModel>
+            {
+                [UpToDateCheckBuilt.SchemaName] = ItemsWithMetadata(("Built", "Kind", ""), ("TaggedBuilt", "Kind", "Tagged")),
+                [UpToDateCheckInput.SchemaName] = ItemsWithMetadata(("Input", "Kind", ""), ("TaggedInput", "Kind", "Tagged")),
+                [UpToDateCheckOutput.SchemaName] = ItemsWithMetadata(("Output", "Kind", ""), ("TaggedOutput", "Kind", "Tagged"))
+            };
+
+            var itemChangeTime = DateTime.UtcNow.AddMinutes(-7);
+            var inputTime      = DateTime.UtcNow.AddMinutes(-6);
+            var lastCheckTime  = DateTime.UtcNow.AddMinutes(-5);
+            var output4Time    = DateTime.UtcNow.AddMinutes(-4);
+            var output3Time    = DateTime.UtcNow.AddMinutes(-3);
+            var output2Time    = DateTime.UtcNow.AddMinutes(-2);
+            var output1Time    = DateTime.UtcNow.AddMinutes(-1);
+
+            await SetupAsync(
+                projectSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime);
+
+            _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Input",        inputTime);
+            _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\TaggedInput",  inputTime);
+            _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Output",       output4Time);
+            _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\TaggedOutput", output3Time);
+            _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\Built",        output2Time);
+            _fileSystem.AddFile("C:\\Dev\\Solution\\Project\\TaggedBuilt",  output1Time);
+
+            await AssertUpToDateAsync(
+                new[] { $"No inputs are newer than earliest output 'C:\\Dev\\Solution\\Project\\Output' ({output4Time.ToLocalTime()})." },
+                ignoreKinds: "");
         }
 
         [Fact]
@@ -878,8 +1075,6 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 [UpToDateCheckBuilt.SchemaName] = ItemWithMetadata("CopiedOutputDestination", "Original", "CopiedOutputSource")
             };
 
-            await SetupAsync(projectSnapshot);
-
             var destinationPath = @"C:\Dev\Solution\Project\CopiedOutputDestination";
             var sourcePath = @"C:\Dev\Solution\Project\CopiedOutputSource";
 
@@ -888,10 +1083,13 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
             var destinationTime = DateTime.UtcNow.AddMinutes(-2);
             var sourceTime      = DateTime.UtcNow.AddMinutes(-1);
 
+            await SetupAsync(
+                projectSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime);
+
             _fileSystem.AddFile(destinationPath, destinationTime);
             _fileSystem.AddFile(sourcePath, sourceTime);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangeTime);
 
             await AssertNotUpToDateAsync(
                 new[]
@@ -915,9 +1113,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 [Content.SchemaName] = ItemWithMetadata("Item1", "CopyToOutputDirectory", "PreserveNewest")
             };
 
-            await _buildUpToDateCheck.LoadAsync();
-
-            BroadcastChange(outDir: outDirSnapshot, sourceRuleSnapshot: sourceSnapshot);
+            await _buildUpToDateCheck.ActivateAsync();
 
             var destinationOutDir = @"NewProjectDirectory\newOutDir\Item1";
             var sourcePath = @"C:\Dev\Solution\Project\Item1";
@@ -927,10 +1123,14 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
             var destinationTime = DateTime.UtcNow.AddMinutes(-2);
             var sourceTime = DateTime.UtcNow.AddMinutes(-1);
 
+            BroadcastChange(
+                outDir: outDirSnapshot,
+                sourceRuleSnapshot: sourceSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime);
+
             _fileSystem.AddFile(destinationOutDir, destinationTime);
             _fileSystem.AddFile(sourcePath, sourceTime);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangeTime);
 
             await AssertNotUpToDateAsync(
                 new[]
@@ -977,8 +1177,6 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 [UpToDateCheckBuilt.SchemaName] = ItemWithMetadata("CopiedOutputDestination", "Original", "CopiedOutputSource")
             };
 
-            await SetupAsync(projectSnapshot);
-
             var destinationPath = @"C:\Dev\Solution\Project\CopiedOutputDestination";
             var sourcePath = @"C:\Dev\Solution\Project\CopiedOutputSource";
 
@@ -986,9 +1184,12 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
             var lastCheckTime  = DateTime.UtcNow.AddMinutes(-3);
             var sourceTime     = DateTime.UtcNow.AddMinutes(-2);
 
+            await SetupAsync(
+                projectSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime);
+
             _fileSystem.AddFile(sourcePath, sourceTime);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangeTime);
 
             await AssertNotUpToDateAsync(
                 new[]
@@ -1009,8 +1210,6 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 [Content.SchemaName] = ItemWithMetadata("Item1", "CopyToOutputDirectory", "PreserveNewest")
             };
 
-            await SetupAsync(sourceSnapshot: sourceSnapshot);
-
             var destinationPath = @"NewProjectDirectory\NewOutputPath\Item1";
             var sourcePath = @"C:\Dev\Solution\Project\Item1";
 
@@ -1019,10 +1218,13 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
             var destinationTime = DateTime.UtcNow.AddMinutes(-2);
             var sourceTime      = DateTime.UtcNow.AddMinutes(-1);
 
+            await SetupAsync(
+                sourceSnapshot: sourceSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime);
+
             _fileSystem.AddFile(destinationPath, destinationTime);
             _fileSystem.AddFile(sourcePath, sourceTime);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangeTime);
 
             await AssertNotUpToDateAsync(
                 new[]
@@ -1044,8 +1246,6 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 [Content.SchemaName] = ItemWithMetadata("Item1", "CopyToOutputDirectory", "PreserveNewest")
             };
 
-            await SetupAsync(sourceSnapshot: sourceSnapshot);
-
             var destinationPath = @"NewProjectDirectory\NewOutputPath\Item1";
             var sourcePath = @"C:\Dev\Solution\Project\Item1";
 
@@ -1053,9 +1253,12 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
             var lastCheckTime   = DateTime.UtcNow.AddMinutes(-3);
             var destinationTime = DateTime.UtcNow.AddMinutes(-2);
 
+            await SetupAsync(
+                sourceSnapshot: sourceSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime);
+
             _fileSystem.AddFile(destinationPath, destinationTime);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangeTime);
 
             await AssertNotUpToDateAsync(
                 new[]
@@ -1075,19 +1278,19 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 [Content.SchemaName] = ItemWithMetadata("Item1", "CopyToOutputDirectory", "PreserveNewest")
             };
 
-            await SetupAsync(sourceSnapshot: sourceSnapshot);
-
             var destinationPath = @"NewProjectDirectory\NewOutputPath\Item1";
             var sourcePath = @"C:\Dev\Solution\Project\Item1";
-
 
             var itemChangeTime = DateTime.UtcNow.AddMinutes(-4);
             var lastCheckTime  = DateTime.UtcNow.AddMinutes(-3);
             var sourceTime     = DateTime.UtcNow.AddMinutes(-2);
 
+            await SetupAsync(
+                sourceSnapshot: sourceSnapshot,
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime);
+
             _fileSystem.AddFile(sourcePath, sourceTime);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangeTime);
 
             await AssertNotUpToDateAsync(
                 new[]
@@ -1103,9 +1306,9 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
         [Fact]
         public async Task IsUpToDateAsync_True_InitialItemDataDoesNotUpdateLastAdditionalDependentFileTimesChangedAtUtc()
         {
-            await _buildUpToDateCheck.LoadAsync();
+            await _buildUpToDateCheck.ActivateAsync();
 
-            Assert.Equal(DateTime.MinValue, _buildUpToDateCheck.TestAccess.State.LastAdditionalDependentFileTimesChangedAtUtc);
+            Assert.Null(_buildUpToDateCheck.TestAccess.State);
 
             var dependentTime = DateTime.UtcNow.AddMinutes(-1);
             var dependentPath = @"C:\Dev\Solution\Project\Dependent";
@@ -1115,17 +1318,17 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
             // Initial change does NOT set LastAdditionalDependentFileTimesChangedAtUtc
             BroadcastChange(dependentTimeFiles: dependentTimeFiles);
 
-            Assert.Equal(DateTime.MinValue, _buildUpToDateCheck.TestAccess.State.LastAdditionalDependentFileTimesChangedAtUtc);
+            Assert.Equal(DateTime.MinValue, _buildUpToDateCheck.TestAccess.State!.ImplicitInputs.Single().LastAdditionalDependentFileTimesChangedAtUtc);
 
             // Broadcasting an update with same Additional Dependent Files does NOT set LastAdditionalDependentFileTimesChangedAtUtc
             BroadcastChange(dependentTimeFiles: dependentTimeFiles);
 
-            Assert.Equal(DateTime.MinValue, _buildUpToDateCheck.TestAccess.State.LastAdditionalDependentFileTimesChangedAtUtc);
+            Assert.Equal(DateTime.MinValue, _buildUpToDateCheck.TestAccess.State.ImplicitInputs.Single().LastAdditionalDependentFileTimesChangedAtUtc);
 
             // Broadcasting removing Additional Dependent Files DOES set LastAdditionalDependentFileTimesChangedAtUtc
             BroadcastChange();
 
-            Assert.NotEqual(DateTime.MinValue, _buildUpToDateCheck.TestAccess.State.LastAdditionalDependentFileTimesChangedAtUtc);
+            Assert.NotEqual(DateTime.MinValue, _buildUpToDateCheck.TestAccess.State.ImplicitInputs.Single().LastAdditionalDependentFileTimesChangedAtUtc);
         }
 
         [Fact(Skip = "TODO fix #6227")]
@@ -1147,23 +1350,23 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
 
             await SetupAsync(
                 projectSnapshot: projectSnapshot,
-                dependentTimeFiles: new[] { (dependentPath, dependentTime) });
+                dependentTimeFiles: new[] { (dependentPath, dependentTime) },
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastAdditionalDependentFileTimesChangedAtUtc: lastAdditionalDependentFileTimesChanged);
 
             _fileSystem.AddFile(dependentPath, dependentTime);
             _fileSystem.AddFile(outputPath, outputTime);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastAdditionalDependentFileTimesChangedAtUtc(lastAdditionalDependentFileTimesChanged);
 
             await AssertUpToDateAsync(
                 $"No inputs are newer than earliest output '{outputPath}' ({outputTime.ToLocalTime()}).");
 
-            // Remove dependentPath
-            await SetupAsync(projectSnapshot: projectSnapshot);
-
             lastAdditionalDependentFileTimesChanged = DateTime.UtcNow.AddMinutes(-1);
 
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangeTime);
-            _buildUpToDateCheck.TestAccess.SetLastAdditionalDependentFileTimesChangedAtUtc(lastAdditionalDependentFileTimesChanged);
+            // Remove dependentPath
+            await SetupAsync(
+                projectSnapshot: projectSnapshot,
+                lastItemsChangedAtUtc: itemChangeTime,
+                lastAdditionalDependentFileTimesChangedAtUtc: lastAdditionalDependentFileTimesChanged);
 
             await AssertNotUpToDateAsync(
                 $"The set of AdditionalDependentFileTimes was changed more recently ({lastAdditionalDependentFileTimesChanged.ToLocalTime()}) " +
@@ -1190,13 +1393,13 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
 
             await SetupAsync(
                 projectSnapshot: projectSnapshot,
-                dependentTimeFiles: new[] { (dependentPath, dependentTime) });
+                dependentTimeFiles: new[] { (dependentPath, dependentTime) },
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime,
+                lastAdditionalDependentFileTimesChangedAtUtc: lastAdditionalDependentFileTimesChanged);
 
             _fileSystem.AddFile(dependentPath, dependentTime);
             _fileSystem.AddFile(outputPath, outputTime);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangeTime);
-            _buildUpToDateCheck.TestAccess.SetLastAdditionalDependentFileTimesChangedAtUtc(lastAdditionalDependentFileTimesChanged);
 
             await AssertNotUpToDateAsync(
                 $"The set of AdditionalDependentFileTimes was changed more recently ({lastAdditionalDependentFileTimesChanged.ToLocalTime()}) " +
@@ -1216,7 +1419,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
             var itemChangeTime = DateTime.UtcNow.AddMinutes(-4);
             var outputTime = DateTime.UtcNow.AddMinutes(-3);
             var dependentTime = DateTime.UtcNow.AddMinutes(-2);
-            // NOTE This delay is neeed to bypass lastAdditionalDependentFileTimesChangedAtUtc
+            // NOTE This delay is needed to bypass lastAdditionalDependentFileTimesChangedAtUtc
             var lastCheckTime = DateTime.UtcNow.AddMinutes(-1);
 
             var dependentPath = @"C:\Dev\Solution\Project\Dependent";
@@ -1224,13 +1427,13 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
 
             await SetupAsync(
                 projectSnapshot: projectSnapshot,
-                dependentTimeFiles: new[] { (dependentPath, dependentTime) });
+                dependentTimeFiles: new[] { (dependentPath, dependentTime) },
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime,
+                lastAdditionalDependentFileTimesChangedAtUtc: lastAdditionalDependentFileTimesChanged);
 
             _fileSystem.AddFile(dependentPath, dependentTime);
             _fileSystem.AddFile(outputPath, outputTime);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangeTime);
-            _buildUpToDateCheck.TestAccess.SetLastAdditionalDependentFileTimesChangedAtUtc(lastAdditionalDependentFileTimesChanged);
 
             await AssertNotUpToDateAsync(
                 $"Input '{dependentPath}' is newer ({dependentTime.ToLocalTime()}) than earliest output '{outputPath}' ({outputTime.ToLocalTime()}), not up to date.",
@@ -1256,13 +1459,13 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
 
             await SetupAsync(
                 projectSnapshot: projectSnapshot,
-                dependentTimeFiles: new[] { (dependentPath, dependentTime) });
+                dependentTimeFiles: new[] { (dependentPath, dependentTime) },
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime,
+                lastAdditionalDependentFileTimesChangedAtUtc: lastAdditionalDependentFileTimesChanged);
 
             _fileSystem.AddFile(dependentPath, dependentTime);
             _fileSystem.AddFile(outputPath, outputTime);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangeTime);
-            _buildUpToDateCheck.TestAccess.SetLastAdditionalDependentFileTimesChangedAtUtc(lastAdditionalDependentFileTimesChanged);
 
             await AssertUpToDateAsync(
                 $"No inputs are newer than earliest output '{outputPath}' ({outputTime.ToLocalTime()}).");
@@ -1287,13 +1490,13 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
 
             await SetupAsync(
                 projectSnapshot: projectSnapshot,
-                dependentTimeFiles: new[] { (dependentPath, dependentTime) });
+                dependentTimeFiles: new[] { (dependentPath, dependentTime) },
+                lastCheckTimeAtUtc: lastCheckTime,
+                lastItemsChangedAtUtc: itemChangeTime,
+                lastAdditionalDependentFileTimesChangedAtUtc: lastAdditionalDependentFileTimesChanged);
 
             // NOTE dependentPath is not present on the file system
             _fileSystem.AddFile(outputPath, outputTime);
-            _buildUpToDateCheck.TestAccess.SetLastCheckedAtUtc(lastCheckTime);
-            _buildUpToDateCheck.TestAccess.SetLastItemsChangedAtUtc(itemChangeTime);
-            _buildUpToDateCheck.TestAccess.SetLastAdditionalDependentFileTimesChangedAtUtc(lastAdditionalDependentFileTimesChanged);
 
             await AssertUpToDateAsync(
                 $"No inputs are newer than earliest output '{outputPath}' ({outputTime.ToLocalTime()}).");
@@ -1301,12 +1504,12 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
 
         #region Test helpers
 
-        private Task AssertNotUpToDateAsync(string? logMessage = null, string? telemetryReason = null, BuildAction buildAction = BuildAction.Build)
+        private Task AssertNotUpToDateAsync(string? logMessage = null, string? telemetryReason = null, BuildAction buildAction = BuildAction.Build, string ignoreKinds = "")
         {
-            return AssertNotUpToDateAsync(logMessage == null ? null : new[] { logMessage }, telemetryReason, buildAction);
+            return AssertNotUpToDateAsync(logMessage == null ? null : new[] { logMessage }, telemetryReason, buildAction, ignoreKinds);
         }
 
-        private async Task AssertNotUpToDateAsync(IReadOnlyList<string>? logMessages, string? telemetryReason = null, BuildAction buildAction = BuildAction.Build)
+        private async Task AssertNotUpToDateAsync(IReadOnlyList<string>? logMessages, string? telemetryReason = null, BuildAction buildAction = BuildAction.Build, string ignoreKinds = "")
         {
             var writer = new AssertWriter(_output);
 
@@ -1318,7 +1521,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 }
             }
 
-            Assert.False(await _buildUpToDateCheck.IsUpToDateAsync(buildAction, writer));
+            Assert.False(await _buildUpToDateCheck.IsUpToDateAsync(buildAction, writer, CreateGlobalProperties(ignoreKinds)));
 
             if (telemetryReason != null)
                 AssertTelemetryFailureEvent(telemetryReason);
@@ -1328,7 +1531,12 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
             writer.Assert();
         }
 
-        private async Task AssertUpToDateAsync(params string[] logMessages)
+        private Task AssertUpToDateAsync(params string[] logMessages)
+        {
+            return AssertUpToDateAsync(logMessages, "");
+        }
+
+        private async Task AssertUpToDateAsync(IEnumerable<string> logMessages, string ignoreKinds = "")
         {
             var writer = new AssertWriter(_output);
 
@@ -1339,29 +1547,71 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
 
             writer.Add("Project is up to date.");
 
-            Assert.True(await _buildUpToDateCheck.IsUpToDateAsync(BuildAction.Build, writer));
+            Assert.True(await _buildUpToDateCheck.IsUpToDateAsync(BuildAction.Build, writer, CreateGlobalProperties(ignoreKinds)));
             AssertTelemetrySuccessEvent();
             writer.Assert();
         }
 
         private void AssertTelemetryFailureEvent(string reason)
         {
-            Assert.Single(_telemetryEvents);
-            Assert.Equal(TelemetryEventName.UpToDateCheckFail, _telemetryEvents.Single().EventName);
-            Assert.Single(_telemetryEvents.Single().Properties);
-            Assert.Equal(TelemetryPropertyName.UpToDateCheckFailReason, _telemetryEvents.Single().Properties.Single().propertyName);
-            Assert.Equal(reason, _telemetryEvents.Single().Properties.Single().propertyValue);
+            var telemetryEvent = Assert.Single(_telemetryEvents);
+
+            Assert.Equal(TelemetryEventName.UpToDateCheckFail, telemetryEvent.EventName);
+            Assert.NotNull(telemetryEvent.Properties);
+            Assert.Equal(4, telemetryEvent.Properties!.Count);
+
+            var reasonProp = Assert.Single(telemetryEvent.Properties.Where(p => p.propertyName == TelemetryPropertyName.UpToDateCheckFailReason));
+            Assert.Equal(reason, reasonProp.propertyValue);
+
+            var durationProp = Assert.Single(telemetryEvent.Properties.Where(p => p.propertyName == TelemetryPropertyName.UpToDateCheckDurationMillis));
+            var duration = Assert.IsType<double>(durationProp.propertyValue);
+            Assert.True(duration > 0.0);
+
+            var fileCountProp = Assert.Single(telemetryEvent.Properties.Where(p => p.propertyName == TelemetryPropertyName.UpToDateCheckFileCount));
+            var fileCount = Assert.IsType<int>(fileCountProp.propertyValue);
+            Assert.True(fileCount >= 0);
+
+            var configurationCountProp = Assert.Single(telemetryEvent.Properties.Where(p => p.propertyName == TelemetryPropertyName.UpToDateCheckConfigurationCount));
+            var configurationCount = Assert.IsType<int>(configurationCountProp.propertyValue);
+            Assert.True(configurationCount == 1);
 
             _telemetryEvents.Clear();
         }
 
         private void AssertTelemetrySuccessEvent()
         {
-            Assert.Single(_telemetryEvents);
-            Assert.Equal(TelemetryEventName.UpToDateCheckSuccess, _telemetryEvents.Single().EventName);
-            Assert.Null(_telemetryEvents.Single().Properties);
+            var telemetryEvent = Assert.Single(_telemetryEvents);
+
+            Assert.Equal(TelemetryEventName.UpToDateCheckSuccess, telemetryEvent.EventName);
+
+            Assert.NotNull(telemetryEvent.Properties);
+            Assert.Equal(3, telemetryEvent.Properties!.Count);
+
+            var durationProp = Assert.Single(telemetryEvent.Properties.Where(p => p.propertyName == TelemetryPropertyName.UpToDateCheckDurationMillis));
+            var duration = Assert.IsType<double>(durationProp.propertyValue);
+            Assert.True(duration > 0.0);
+
+            var fileCountProp = Assert.Single(telemetryEvent.Properties.Where(p => p.propertyName == TelemetryPropertyName.UpToDateCheckFileCount));
+            var fileCount = Assert.IsType<int>(fileCountProp.propertyValue);
+            Assert.True(fileCount >= 0);
+
+            var configurationCountProp = Assert.Single(telemetryEvent.Properties.Where(p => p.propertyName == TelemetryPropertyName.UpToDateCheckConfigurationCount));
+            var configurationCount = Assert.IsType<int>(configurationCountProp.propertyValue);
+            Assert.True(configurationCount == 1);
 
             _telemetryEvents.Clear();
+        }
+
+        private static ImmutableDictionary<string, string> CreateGlobalProperties(string ignoreKinds)
+        {
+            var globalProperties = ImmutableDictionary<string, string>.Empty;
+
+            if (ignoreKinds.Length != 0)
+            {
+                globalProperties = globalProperties.SetItem(BuildUpToDateCheck.FastUpToDateCheckIgnoresKindsGlobalPropertyName, ignoreKinds);
+            }
+
+            return globalProperties;
         }
 
         private sealed class AssertWriter : TextWriter, IEnumerable

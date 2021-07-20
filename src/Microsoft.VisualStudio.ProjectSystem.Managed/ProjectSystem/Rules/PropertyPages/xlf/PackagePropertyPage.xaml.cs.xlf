@@ -2,9 +2,19 @@
 <xliff xmlns="urn:oasis:names:tc:xliff:document:1.2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.2" xsi:schemaLocation="urn:oasis:names:tc:xliff:document:1.2 xliff-core-1.2-transitional.xsd">
   <file datatype="xml" source-language="en" target-language="cs" original="../PackagePropertyPage.xaml">
     <body>
+      <trans-unit id="BoolProperty|GeneratePackageOnBuild|Description">
+        <source>Produce a package file during build operations.</source>
+        <target state="translated">Vytvořit během operací sestavování soubor balíčku</target>
+        <note />
+      </trans-unit>
       <trans-unit id="BoolProperty|GeneratePackageOnBuild|DisplayName">
         <source>Generate NuGet package on build</source>
         <target state="translated">Při sestavení generovat balíček NuGet</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="BoolProperty|PackageRequireLicenseAcceptance|Description">
+        <source>Prompt the user to accept the license when installing this package.</source>
+        <target state="translated">Při instalaci tohoto balíčku požádat uživatele, aby přijal licenci</target>
         <note />
       </trans-unit>
       <trans-unit id="BoolProperty|PackageRequireLicenseAcceptance|DisplayName">
@@ -12,17 +22,62 @@
         <target state="translated">Vyžadovat přijetí licence</target>
         <note />
       </trans-unit>
+      <trans-unit id="Category|General|Description">
+        <source>General settings for the package.</source>
+        <target state="translated">Obecná nastavení pro balíček</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="Category|General|DisplayName">
+        <source>General</source>
+        <target state="translated">Obecné</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="Category|License|Description">
+        <source>Specifies the license for the package.</source>
+        <target state="translated">Určuje licenci pro balíček.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="Category|License|DisplayName">
+        <source>License</source>
+        <target state="translated">Licence</target>
+        <note />
+      </trans-unit>
       <trans-unit id="DynamicEnumProperty|NeutralLanguage|DisplayName">
         <source>Assembly neutral language</source>
         <target state="translated">Neutrální jazyk sestavení</target>
         <note />
       </trans-unit>
-      <trans-unit id="Rule|PackagePropertyPage|Description">
+      <trans-unit id="EnumProperty|PackageLicenseKind|Description">
+        <source>Specify a license for the project's package.</source>
+        <target state="translated">Zadejte licenci pro balíček projektu.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="EnumProperty|PackageLicenseKind|DisplayName">
+        <source>Package License</source>
+        <target state="translated">Licence balíčku</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="EnumValue|PackageLicenseKind.Expression|DisplayName">
+        <source>SPDX License Expression</source>
+        <target state="translated">Výraz licence SPDX</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="EnumValue|PackageLicenseKind.File|DisplayName">
+        <source>Embedded File</source>
+        <target state="translated">Vložený soubor</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="EnumValue|PackageLicenseKind.None|DisplayName">
+        <source>None</source>
+        <target state="translated">Žádné</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="Rule|Package|Description">
         <source>Properties related to producing NuGet packages.</source>
         <target state="translated">Vlastnosti související s vytvářením balíčků NuGet</target>
         <note />
       </trans-unit>
-      <trans-unit id="Rule|PackagePropertyPage|DisplayName">
+      <trans-unit id="Rule|Package|DisplayName">
         <source>Package</source>
         <target state="translated">Balíček</target>
         <note />
@@ -140,6 +195,11 @@
       <trans-unit id="StringProperty|Product|DisplayName">
         <source>Product</source>
         <target state="translated">Produkt</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="StringProperty|ReadAboutSpdxExpressions|DisplayName">
+        <source>Read about SPDX license expressions</source>
+        <target state="translated">Informace o výrazech licence SPDX</target>
         <note />
       </trans-unit>
       <trans-unit id="StringProperty|RepositoryType|Description">

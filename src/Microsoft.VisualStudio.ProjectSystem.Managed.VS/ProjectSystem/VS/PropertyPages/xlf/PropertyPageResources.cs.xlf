@@ -57,6 +57,11 @@
         <target state="translated">Název hostitele není platný.</target>
         <note />
       </trans-unit>
+      <trans-unit id="JSWebView2DebuggingAdditionalText">
+        <source>(Requires the JavaScript Diagnostics component)</source>
+        <target state="translated">(Vyžaduje komponentu JavaScript Diagnostics.)</target>
+        <note />
+      </trans-unit>
       <trans-unit id="LaunchUrlWatermark">
         <source>Absolute or relative URL</source>
         <target state="translated">Absolutní nebo relativní URL</target>
@@ -240,6 +245,11 @@
       <trans-unit id="OKBtnHelpText">
         <source>Create the profile and return to the debug property page with the new profile selected</source>
         <target state="translated">Vytvoří profil a vrátí se na stránku vlastností ladění s novým vybraným profilem.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="chkJSWebView2DebuggingText">
+        <source>Enable JavaScript debugger for Microsoft Edge (Chromium) based WebView2</source>
+        <target state="translated">Povolit javascriptový ladicí program pro ovládací prvek WebView2 založený na prohlížeči Microsoft Edge (Chromium)</target>
         <note />
       </trans-unit>
       <trans-unit id="chkLaunchBrowserHelpText">

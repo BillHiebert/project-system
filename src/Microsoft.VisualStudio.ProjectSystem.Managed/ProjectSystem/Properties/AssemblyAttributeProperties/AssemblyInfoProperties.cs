@@ -16,7 +16,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.Properties
     {
         private readonly ImmutableDictionary<string, SourceAssemblyAttributePropertyValueProvider> _attributeValueProviderMap;
 
-        // See https://github.com/dotnet/sdk/blob/master/src/Tasks/Microsoft.NET.Build.Tasks/build/Microsoft.NET.GenerateAssemblyInfo.targets
+        // See https://github.com/dotnet/sdk/blob/master/src/Tasks/Microsoft.NET.Build.Tasks/targets/Microsoft.NET.GenerateAssemblyInfo.targets
         internal static readonly ImmutableDictionary<string, (string attributeName, string generatePropertyInProjectFileName)> AssemblyPropertyInfoMap = new Dictionary<string, (string AttributeName, string GeneratePropertyInProjectFileName)>
         {
             { "Description",           ( AttributeName: "System.Reflection.AssemblyDescriptionAttribute", GeneratePropertyInProjectFileName: "GenerateAssemblyDescriptionAttribute" ) },
@@ -31,7 +31,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.Properties
 
         public AssemblyInfoProperties(
             IProjectProperties delegatedProjectProperties,
-            Func<ProjectId> getActiveProjectId,
+            Func<ProjectId?> getActiveProjectId,
             Workspace workspace,
             IProjectThreadingService threadingService)
             : base(delegatedProjectProperties)
@@ -40,7 +40,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.Properties
         }
 
         private static ImmutableDictionary<string, SourceAssemblyAttributePropertyValueProvider> CreateAttributeValueProviderMap(
-            Func<ProjectId> getActiveProjectId,
+            Func<ProjectId?> getActiveProjectId,
             Workspace workspace,
             IProjectThreadingService threadingService)
         {
@@ -60,7 +60,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.Properties
         public override async Task<string?> GetUnevaluatedPropertyValueAsync(string propertyName)
         {
             if (_attributeValueProviderMap.ContainsKey(propertyName) &&
-                !await IsAssemblyInfoPropertyGeneratedByBuild(propertyName))
+                !await IsAssemblyInfoPropertyGeneratedByBuildAsync(propertyName))
             {
                 return await GetPropertyValueFromSourceAttributeAsync(propertyName);
             }
@@ -74,7 +74,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.Properties
         public override async Task<string> GetEvaluatedPropertyValueAsync(string propertyName)
         {
             if (_attributeValueProviderMap.ContainsKey(propertyName) &&
-                !await IsAssemblyInfoPropertyGeneratedByBuild(propertyName))
+                !await IsAssemblyInfoPropertyGeneratedByBuildAsync(propertyName))
             {
                 return (await GetPropertyValueFromSourceAttributeAsync(propertyName)) ?? "";
             }
@@ -101,7 +101,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.Properties
         public override async Task SetPropertyValueAsync(string propertyName, string unevaluatedPropertyValue, IReadOnlyDictionary<string, string>? dimensionalConditions = null)
         {
             if (_attributeValueProviderMap.TryGetValue(propertyName, out SourceAssemblyAttributePropertyValueProvider? provider) &&
-                !await IsAssemblyInfoPropertyGeneratedByBuild(propertyName))
+                !await IsAssemblyInfoPropertyGeneratedByBuildAsync(propertyName))
             {
                 await provider.SetPropertyValueAsync(unevaluatedPropertyValue);
             }
@@ -111,7 +111,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.Properties
             }
         }
 
-        private async Task<bool> IsAssemblyInfoPropertyGeneratedByBuild(string propertyName)
+        private async Task<bool> IsAssemblyInfoPropertyGeneratedByBuildAsync(string propertyName)
         {
             (_, string generatePropertyInProjectFileName) = AssemblyPropertyInfoMap[propertyName];
 

@@ -10,6 +10,7 @@ using Microsoft.VisualStudio.ProjectSystem.Query;
 using Microsoft.VisualStudio.ProjectSystem.Query.Frameworks;
 using Microsoft.VisualStudio.ProjectSystem.Query.ProjectModel;
 using Microsoft.VisualStudio.ProjectSystem.Query.ProjectModel.Implementation;
+using Microsoft.VisualStudio.ProjectSystem.Query.QueryExecution;
 
 namespace Microsoft.VisualStudio.ProjectSystem.VS.Query
 {
@@ -62,34 +63,68 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.Query
                 };
             }
 
-            ((IEntityValueFromProvider)newUIPropertyValue).ProviderState = (configuration, property);
+            ((IEntityValueFromProvider)newUIPropertyValue).ProviderState = new PropertyValueProviderState(configuration, property);
 
             return newUIPropertyValue;
         }
 
         public static async Task<IEnumerable<IEntityValue>> CreateUIPropertyValueValuesAsync(
+            IQueryExecutionContext queryExecutionContext,
             IEntityValue parent,
-            IPropertyPageQueryCache cache,
+            IProjectState cache,
             Rule schema,
+            QueryProjectPropertiesContext propertiesContext,
             string propertyName,
             IUIPropertyValuePropertiesAvailableStatus requestedProperties)
         {
+            BaseProperty? unboundProperty = schema.GetProperty(propertyName);
+            if (unboundProperty is null)
+            {
+                return ImmutableList<IEntityValue>.Empty;
+            }
+
             ImmutableList<IEntityValue>.Builder builder = ImmutableList.CreateBuilder<IEntityValue>();
 
-            if (await cache.GetKnownConfigurationsAsync() is IImmutableSet<ProjectConfiguration> knownConfigurations)
+            IEnumerable<ProjectConfiguration> configurations;
+            if (unboundProperty.IsConfigurationDependent())
             {
-                foreach (ProjectConfiguration knownConfiguration in knownConfigurations)
+                // Return the values across all configurations.
+                configurations = await cache.GetKnownConfigurationsAsync() ?? Enumerable.Empty<ProjectConfiguration>();
+            }
+            else
+            {
+                // Return the value from any one configuration.
+                if (await cache.GetSuggestedConfigurationAsync() is ProjectConfiguration defaultConfiguration)
                 {
-                    if (await cache.BindToRule(knownConfiguration, schema.Name) is IRule rule
-                        && rule.GetProperty(propertyName) is ProjectSystem.Properties.IProperty property)
-                    {
-                        IEntityValue propertyValue = await CreateUIPropertyValueValueAsync(parent, knownConfiguration, property, requestedProperties);
-                        builder.Add(propertyValue);
-                    }
+                    configurations = CreateSingleItemEnumerable(defaultConfiguration);
+                }
+                else
+                {
+                    configurations = Enumerable.Empty<ProjectConfiguration>();
+                }
+            }
+
+            foreach (ProjectConfiguration configuration in configurations)
+            {
+                if (await cache.GetDataVersionAsync(configuration) is (string versionKey, long versionNumber))
+                {
+                    queryExecutionContext.ReportInputDataVersion(versionKey, versionNumber);
+                }
+
+                if (await cache.BindToRuleAsync(configuration, schema.Name, propertiesContext) is IRule rule
+                    && rule.GetProperty(propertyName) is ProjectSystem.Properties.IProperty property)
+                {
+                    IEntityValue propertyValue = await CreateUIPropertyValueValueAsync(parent, configuration, property, requestedProperties);
+                    builder.Add(propertyValue);
                 }
             }
 
             return builder.ToImmutable();
+
+            static IEnumerable<ProjectConfiguration> CreateSingleItemEnumerable(ProjectConfiguration singleProjectConfiguration)
+            {
+                yield return singleProjectConfiguration;
+            }
         }
     }
 }

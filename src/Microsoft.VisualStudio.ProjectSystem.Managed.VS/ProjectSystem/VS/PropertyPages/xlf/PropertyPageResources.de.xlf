@@ -57,6 +57,11 @@
         <target state="translated">Der Hostname ist ungültig.</target>
         <note />
       </trans-unit>
+      <trans-unit id="JSWebView2DebuggingAdditionalText">
+        <source>(Requires the JavaScript Diagnostics component)</source>
+        <target state="translated">(Erfordert die JavaScript-Diagnosekomponente)</target>
+        <note />
+      </trans-unit>
       <trans-unit id="LaunchUrlWatermark">
         <source>Absolute or relative URL</source>
         <target state="translated">Absolute oder relative URL</target>
@@ -240,6 +245,11 @@
       <trans-unit id="OKBtnHelpText">
         <source>Create the profile and return to the debug property page with the new profile selected</source>
         <target state="translated">Profil erstellen und mit ausgewähltem neuen Profil zur Debugeigenschaftenseite zurückkehren</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="chkJSWebView2DebuggingText">
+        <source>Enable JavaScript debugger for Microsoft Edge (Chromium) based WebView2</source>
+        <target state="translated">JavaScript-Debugger für WebView2, basierend auf Microsoft Edge (Chromium), aktivieren</target>
         <note />
       </trans-unit>
       <trans-unit id="chkLaunchBrowserHelpText">

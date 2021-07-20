@@ -3,15 +3,13 @@
 using System.Collections.Immutable;
 using System.ComponentModel.Composition;
 using Microsoft.VisualStudio.Imaging;
-using Microsoft.VisualStudio.Imaging.Interop;
 using Microsoft.VisualStudio.ProjectSystem.Tree.Dependencies.CrossTarget;
 using Microsoft.VisualStudio.ProjectSystem.Tree.Dependencies.Models;
 using Microsoft.VisualStudio.ProjectSystem.VS.Tree.Dependencies;
 
 namespace Microsoft.VisualStudio.ProjectSystem.Tree.Dependencies.Subscriptions.RuleHandlers
 {
-    [Export(DependencyRulesSubscriber.DependencyRulesSubscriberContract,
-            typeof(IDependenciesRuleHandler))]
+    [Export(DependencyRulesSubscriber.DependencyRulesSubscriberContract, typeof(IDependenciesRuleHandler))]
     [Export(typeof(IProjectDependenciesSubTreeProvider))]
     [AppliesTo(ProjectCapability.DependenciesTree)]
     internal class SdkRuleHandler : DependenciesRuleHandlerBase
@@ -25,7 +23,9 @@ namespace Microsoft.VisualStudio.ProjectSystem.Tree.Dependencies.Subscriptions.R
                 icon: KnownMonikers.SDK,
                 expandedIcon: KnownMonikers.SDK,
                 unresolvedIcon: KnownMonikers.SDKWarning,
-                unresolvedExpandedIcon: KnownMonikers.SDKWarning),
+                unresolvedExpandedIcon: KnownMonikers.SDKWarning,
+                implicitIcon: KnownMonikers.SDKPrivate,
+                implicitExpandedIcon: KnownMonikers.SDKPrivate),
             DependencyTreeFlags.SdkDependencyGroup);
 
         public SdkRuleHandler()
@@ -35,7 +35,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.Tree.Dependencies.Subscriptions.R
 
         public override string ProviderType => ProviderTypeString;
 
-        public override ImageMoniker ImplicitIcon => KnownMonikers.SDKPrivate;
+        public override ProjectTreeFlags GroupNodeFlag => DependencyTreeFlags.SdkDependencyGroup;
 
         public override IDependencyModel CreateRootDependencyNode() => s_groupModel;
 

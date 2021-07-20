@@ -31,6 +31,9 @@ Namespace Microsoft.VisualStudio.Editors.ApplicationDesigner
         Private Shared ReadOnly s_editorGuid As New Guid(EditorGuidString)
         Private Shared ReadOnly s_commandUIGuid As New Guid("{d06cd5e3-d961-44dc-9d80-c89a1a8d9d56}")
 
+        'GUID of the new project properties editor, to delegate to if enabled
+        Private Shared ReadOnly s_newEditorGuid As New Guid("{990036EB-F67A-4B8A-93D4-4663DB2A1033}")
+
         'Exposing the GUID for the rest of the assembly to see
         Public Shared ReadOnly Property EditorGuid As Guid
             Get
@@ -45,7 +48,7 @@ Namespace Microsoft.VisualStudio.Editors.ApplicationDesigner
             End Get
         End Property
 
-        Private _site As Object 'The site that owns this editor factory
+        Private _site As OLE.Interop.IServiceProvider 'The site that owns this editor factory
         Private _siteProvider As ServiceProvider 'The service provider from m_Site
 
         ''' <summary>
@@ -174,6 +177,26 @@ Namespace Microsoft.VisualStudio.Editors.ApplicationDesigner
                 ByRef pgrfCDW As Integer) As Integer _
         Implements IVsEditorFactory.CreateEditorInstance
 
+            ' If we're using the new project properties editor, delegate to its editor factory
+            Dim shouldUseNewEditor As Boolean = Hierarchy.IsCapabilityMatch("ProjectPropertiesEditor")
+
+            Common.TelemetryLogger.LogEditorCreation(shouldUseNewEditor, FileName, PhysicalView)
+
+            If shouldUseNewEditor Then
+                Return GetNewEditorFactory().CreateEditorInstance(
+                    vscreateeditorflags,
+                    FileName,
+                    PhysicalView,
+                    Hierarchy,
+                    ItemId,
+                    ExistingDocDataPtr,
+                    DocViewPtr,
+                    DocDataPtr,
+                    Caption,
+                    CmdUIGuid,
+                    pgrfCDW)
+            End If
+
             Dim ExistingDocData As Object = Nothing
             Dim DocView As Object = Nothing
             Dim DocData As Object = Nothing
@@ -189,6 +212,7 @@ Namespace Microsoft.VisualStudio.Editors.ApplicationDesigner
 
             Dim hr As Integer = InternalCreateEditorInstance(FileName, Hierarchy, Itemid, ExistingDocData,
                 DocView, DocData, Caption, CmdUIGuid, pgrfCDW)
+
             If NativeMethods.Failed(hr) Then
                 Return hr
             End If
@@ -204,12 +228,37 @@ Namespace Microsoft.VisualStudio.Editors.ApplicationDesigner
             Return hr
         End Function
 
+        Private Function GetNewEditorFactory() As IVsEditorFactory
+            Dim vsUIShellOpenDocument = TryCast(_siteProvider.GetService(GetType(IVsUIShellOpenDocument)), IVsUIShellOpenDocument)
+
+            Assumes.Present(vsUIShellOpenDocument)
+
+            Dim newEditorGuid = s_newEditorGuid
+            Dim newEditorFactory as IVsEditorFactory = Nothing
+
+            Verify.HResult(vsUIShellOpenDocument.GetStandardEditorFactory(
+                dwReserved := 0,
+                newEditorGuid,
+                pszMkDocument := Nothing,
+                VSConstants.LOGVIEWID.Designer_guid,
+                pbstrPhysicalView := Nothing,
+                newEditorFactory))
+
+            Assumes.Present(newEditorFactory)
+            Return newEditorFactory
+        End Function
+
         ''' <summary>
         ''' We only support the default view
         ''' </summary>
         ''' <param name="rguidLogicalView"></param>
         ''' <param name="pbstrPhysicalView"></param>
         Public Function MapLogicalView(ByRef rguidLogicalView As Guid, ByRef pbstrPhysicalView As String) As Integer Implements IVsEditorFactory.MapLogicalView
+
+            ' NOTE we do not have a hierarchy, so don't know if this is a CPS project. We don't know whether to delegate to
+            ' Microsoft.VisualStudio.ProjectSystem.VS.Implementation.PropertyPages.Designer.ProjectPropertiesEditorFactory.
+            ' Therefore we ensure the logic in both implementations of MapLogicalView is identical.
+
             pbstrPhysicalView = Nothing
 
             ' The designer nominally supports VSConstants.LOGVIEWID.Designer_guid however it is also called with other GUIDs

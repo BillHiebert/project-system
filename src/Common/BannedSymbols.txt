@@ -13,6 +13,8 @@ T:Microsoft.VisualStudio.ProjectSystem.IProjectLockService; Using IProjectAccess
 T:Microsoft.VisualStudio.ProjectSystem.VS.IProjectGuidService; Using ISafeProjectGuidService avoids reading the GUID before it is safe to do so during initialisation
 T:Microsoft.VisualStudio.ProjectSystem.VS.IProjectGuidService2; Using ISafeProjectGuidService avoids reading the GUID before it is safe to do so during initialisation
 
+T:NuGet.VisualStudio.IVsFrameworkParser; FrameworkName does not support the platform information added in .NET 5
+
 P:Microsoft.VisualStudio.ProjectSystem.VS.IProjectAsyncLoadDashboard.ProjectLoadedInHost; Using IUnconfiguredProjectTasksService.ProjectLoadedInHost prevents waiting indefinitely when the project is closed before it has finished loading
 
 M:Microsoft.VisualStudio.ProjectSystem.CommonProjectSystemTools.LoadedProject(Microsoft.VisualStudio.ProjectSystem.IProjectAsynchronousTasksService); Using IUnconfiguredProjectTasksService.LoadedProjectAsync is unit testable
@@ -58,6 +60,7 @@ M:Microsoft.VisualStudio.ProjectSystem.IProjectThreadingService.Fork(System.Func
 
 T:System.Threading.Tasks.Dataflow.ActionBlock`1;Use DataflowUtilities.LinkToAction/LinkToAsyncAction or DataflowBlockFactory.CreateActionBlock to reduce memory and avoid the overhead of the built-in blocks
 T:System.Threading.Tasks.Dataflow.BroadcastBlock`1;Use DataflowBlockSlim.CreateBroadcastBlock to reduce memory and avoid the overhead of the built-in blocks
+T:System.Threading.Tasks.Dataflow.BufferBlock`1;Use DataflowBlockSlim.CreateSimpleBufferBlock to reduce memory and avoid the overhead of the built-in blocks
 T:System.Threading.Tasks.Dataflow.TransformManyBlock`2;Use DataflowBlockSlim.CreateTransformManyBlock to reduce memory and avoid the overhead of the built-in blocks
 
 M:Microsoft.VisualStudio.ProjectSystem.DataflowBlockSlim.CreateActionBlock`1(System.Action{``0},System.Threading.Tasks.Dataflow.ExecutionDataflowBlockOptions);Use DataflowBlockFactory.CreateActionBlock to ensure failed blocks are reported as non-fatal watsons and assigned to the correct component
@@ -91,3 +94,5 @@ M:System.Diagnostics.Debugger.Break(); This should not be used in production cod
 M:System.Diagnostics.Debugger.Launch(); This should not be used in production code as the resulting dialog is not meant to be shown to users.
 
 T:Microsoft.VisualStudio.ProjectSystem.ActiveConfiguredProject`1; Use IActiveConfiguredValue<T>, and handle when Value returns null.
+
+T:System.Runtime.Serialization.Formatters.Binary.BinaryFormatter;Use a preferred alternative: https://docs.microsoft.com/en-us/dotnet/standard/serialization/binaryformatter-security-guide#preferred-alternatives

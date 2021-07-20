@@ -9,6 +9,7 @@ using Microsoft.VisualStudio.ProjectSystem.Query;
 using Microsoft.VisualStudio.ProjectSystem.Query.Frameworks;
 using Microsoft.VisualStudio.ProjectSystem.Query.ProjectModel;
 using Microsoft.VisualStudio.ProjectSystem.Query.ProjectModel.Implementation;
+using Microsoft.VisualStudio.ProjectSystem.Query.QueryExecution;
 
 namespace Microsoft.VisualStudio.ProjectSystem.VS.Query
 {
@@ -17,25 +18,37 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.Query
     /// </summary>
     internal static class PropertyPageDataProducer
     {
-        public static IEntityValue CreatePropertyPageValue(IEntityValue parent, IPropertyPageQueryCache cache, Rule rule, IPropertyPagePropertiesAvailableStatus requestedProperties)
+        public static IEntityValue CreatePropertyPageValue(IQueryExecutionContext queryExecutionContext, IEntityValue parent, IProjectState cache, QueryProjectPropertiesContext propertiesContext, Rule rule, IPropertyPagePropertiesAvailableStatus requestedProperties)
         {
             Requires.NotNull(parent, nameof(parent));
             Requires.NotNull(rule, nameof(rule));
 
             var identity = new EntityIdentity(
                 ((IEntityWithId)parent).Id,
-                new KeyValuePair<string, string>[]
-                {
-                    new(ProjectModelIdentityKeys.PropertyPageName, rule.Name)
-                });
+                createKeys());
 
-            return CreatePropertyPageValue(parent.EntityRuntime, identity, cache, rule, requestedProperties);
+            return CreatePropertyPageValue(queryExecutionContext, identity, cache, propertiesContext, rule, requestedProperties);
+
+            IEnumerable<KeyValuePair<string, string>> createKeys()
+            {
+                yield return new(ProjectModelIdentityKeys.PropertyPageName, rule.Name);
+
+                if (propertiesContext.ItemType is not null)
+                {
+                    yield return new(ProjectModelIdentityKeys.SourceItemType, propertiesContext.ItemType);
+                }
+
+                if (propertiesContext.ItemName is not null)
+                {
+                    yield return new(ProjectModelIdentityKeys.SourceItemName, propertiesContext.ItemName);
+                }
+            }
         }
 
-        public static IEntityValue CreatePropertyPageValue(IEntityRuntimeModel runtimeModel, EntityIdentity id, IPropertyPageQueryCache cache, Rule rule, IPropertyPagePropertiesAvailableStatus requestedProperties)
+        public static IEntityValue CreatePropertyPageValue(IQueryExecutionContext queryExecutionContext, EntityIdentity id, IProjectState cache, QueryProjectPropertiesContext propertiesContext, Rule rule, IPropertyPagePropertiesAvailableStatus requestedProperties)
         {
             Requires.NotNull(rule, nameof(rule));
-            var newPropertyPage = new PropertyPageValue(runtimeModel, id, new PropertyPagePropertiesAvailableStatus());
+            var newPropertyPage = new PropertyPageValue(queryExecutionContext.EntityRuntime, id, new PropertyPagePropertiesAvailableStatus());
 
             if (requestedProperties.Name)
             {
@@ -57,33 +70,40 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.Query
                 newPropertyPage.Kind = rule.PageTemplate;
             }
 
-            ((IEntityValueFromProvider)newPropertyPage).ProviderState = (cache, rule);
+            ((IEntityValueFromProvider)newPropertyPage).ProviderState = new ContextAndRuleProviderState(cache, propertiesContext, rule);
 
             return newPropertyPage;
         }
 
         public static async Task<IEntityValue?> CreatePropertyPageValueAsync(
-            IEntityRuntimeModel runtimeModel,
+            IQueryExecutionContext queryExecutionContext,
             EntityIdentity id,
             IProjectService2 projectService,
-            string projectPath,
+            QueryProjectPropertiesContext propertiesContext,
             string propertyPageName,
             IPropertyPagePropertiesAvailableStatus requestedProperties)
         {
-            if (projectService.GetLoadedProject(projectPath) is UnconfiguredProject project
-                && await project.GetProjectLevelPropertyPagesCatalogAsync() is IPropertyPagesCatalog projectCatalog
-                && projectCatalog.GetSchema(propertyPageName) is Rule rule
-                && !rule.PropertyPagesHidden)
+            if (projectService.GetLoadedProject(propertiesContext.File) is UnconfiguredProject project)
             {
-                var propertyPageQueryCache = new PropertyPageQueryCache(project);
-                IEntityValue propertyPageValue = CreatePropertyPageValue(runtimeModel, id, propertyPageQueryCache, rule, requestedProperties);
-                return propertyPageValue;
+                // TODO: Go through the IProjectState to get this
+                project.GetQueryDataVersion(out string versionKey, out long versionNumber);
+                queryExecutionContext.ReportInputDataVersion(versionKey, versionNumber);
+
+                if (await project.GetProjectLevelPropertyPagesCatalogAsync() is IPropertyPagesCatalog projectCatalog
+                    && projectCatalog.GetSchema(propertyPageName) is Rule rule
+                    && !rule.PropertyPagesHidden)
+                {
+                    IProjectState projectState = new PropertyPageProjectState(project);
+                    IEntityValue propertyPageValue = CreatePropertyPageValue(queryExecutionContext, id, projectState, propertiesContext, rule, requestedProperties);
+                    return propertyPageValue;
+                }
             }
 
             return null;
         }
 
         public static async Task<IEnumerable<IEntityValue>> CreatePropertyPageValuesAsync(
+            IQueryExecutionContext queryExecutionContext,
             IEntityValue parent,
             UnconfiguredProject project,
             IPropertyPagePropertiesAvailableStatus requestedProperties)
@@ -97,13 +117,14 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.Query
 
             IEnumerable<IEntityValue> createPropertyPageValuesAsync()
             {
-                var propertyPageQueryContext = new PropertyPageQueryCache(project);
+                IProjectState projectState = new PropertyPageProjectState(project);
+                QueryProjectPropertiesContext propertiesContext = new QueryProjectPropertiesContext(isProjectFile: true, project.FullPath, itemType: null, itemName: null);
                 foreach (string schemaName in projectCatalog.GetProjectLevelPropertyPagesSchemas())
                 {
                     if (projectCatalog.GetSchema(schemaName) is Rule rule
                         && !rule.PropertyPagesHidden)
                     {
-                        IEntityValue propertyPageValue = CreatePropertyPageValue(parent, propertyPageQueryContext, rule, requestedProperties);
+                        IEntityValue propertyPageValue = CreatePropertyPageValue(queryExecutionContext, parent, projectState, propertiesContext, rule, requestedProperties: requestedProperties);
                         yield return propertyPageValue;
                     }
                 }

@@ -4,7 +4,9 @@ Imports System.ComponentModel.Design
 Imports System.Drawing
 Imports System.Drawing.Imaging
 Imports System.IO
+Imports System.Runtime.CompilerServices
 Imports System.Runtime.InteropServices
+Imports System.Runtime.Serialization
 Imports System.Runtime.Versioning
 Imports System.Text
 Imports System.Text.RegularExpressions
@@ -1447,6 +1449,24 @@ Namespace Microsoft.VisualStudio.Editors.Common
         End Function
 
         ''' <summary>
+        ''' Determines whether the project associated with the given hierarchy is targeting .NET Framework
+        ''' </summary>
+        ''' <param name="hierarchy">Hierarchy object.</param>
+        ''' <returns>Value indicating whether the project associated with the given hierarchy is targeting .NET Framework.</returns>
+        Friend Function IsTargetingDotNetFramework(hierarchy As IVsHierarchy) As Boolean
+
+            Dim frameworkName As FrameworkName = Nothing
+            If TryGetTargetFrameworkMoniker(hierarchy, frameworkName) Then
+                ' Verify that we are targeting .NET
+                Return String.Equals(frameworkName.Identifier, ".NETFramework", StringComparison.OrdinalIgnoreCase)
+
+            End If
+
+            Return False
+
+        End Function
+
+        ''' <summary>
         ''' Determines whether the project associated with the given hierarchy is targeting .NET Core
         ''' </summary>
         ''' <param name="hierarchy">Hierarchy object.</param>
@@ -1593,7 +1613,13 @@ Namespace Microsoft.VisualStudio.Editors.Common
 #Region "Telemetry"
         Public Class TelemetryLogger
 
-            Private Const InputXmlFormEventName As String = "vs/projectsystem/editors/inputxmlform"
+            Private Const ProjectSystemEventNamePrefix As String = "vs/projectsystem/"
+            Private Const EditorsEventNamePrefix As String = ProjectSystemEventNamePrefix + "editors/"
+
+            Private Const ProjectSystemPropertyNamePrefix As String = "vs.projectsystem."
+            Private Const EditorsPropertyNamePrefix As String = ProjectSystemPropertyNamePrefix + "editors."
+
+            Private Const InputXmlFormEventName As String = EditorsEventNamePrefix + "inputxmlform"
             Public Enum InputXmlFormEvent
                 FormOpened
                 FromFileButtonClicked
@@ -1603,7 +1629,7 @@ Namespace Microsoft.VisualStudio.Editors.Common
 
             Public Shared Sub LogInputXmlFormEvent(eventValue As InputXmlFormEvent)
                 Dim userTask = New UserTaskEvent(InputXmlFormEventName, TelemetryResult.Success)
-                userTask.Properties("vs.projectsystem.editors.inputxmlform") = eventValue
+                userTask.Properties(EditorsPropertyNamePrefix + "inputxmlform") = eventValue
                 TelemetryService.DefaultSession.PostEvent(userTask)
             End Sub
 
@@ -1611,7 +1637,7 @@ Namespace Microsoft.VisualStudio.Editors.Common
                 TelemetryService.DefaultSession.PostFault(InputXmlFormEventName, "Exception encountered during Xml Schema Inference", ex)
             End Sub
 
-            Private Const AdvBuildSettingsPropPageEventName As String = "vs/projectsystem/appdesigner/advbuildsettingsproppage"
+            Private Const AdvBuildSettingsPropPageEventName As String = ProjectSystemEventNamePrefix + "appdesigner/advbuildsettingsproppage"
             Public Enum AdvBuildSettingsPropPageEvent
                 FormOpened = 0
                 LangVersionMoreInfoLinkClicked = 1
@@ -1619,11 +1645,57 @@ Namespace Microsoft.VisualStudio.Editors.Common
 
             Public Shared Sub LogAdvBuildSettingsPropPageEvent(eventValue As AdvBuildSettingsPropPageEvent)
                 Dim userTask = New UserTaskEvent(AdvBuildSettingsPropPageEventName, TelemetryResult.Success)
-                userTask.Properties("vs.projectsystem.appdesigner.advbuildsettingsproppage") = eventValue
+                userTask.Properties(ProjectSystemPropertyNamePrefix + "appdesigner.advbuildsettingsproppage") = eventValue
+                TelemetryService.DefaultSession.PostEvent(userTask)
+            End Sub
+
+            Private Const BinaryFormatterEventName As String = EditorsEventNamePrefix + "binaryformatter"
+            Private Const BinaryFormatterPropertyNamePrefix As String = EditorsPropertyNamePrefix + "binaryformatter."
+            Public Enum BinaryFormatterOperation
+                Serialize = 0
+                Deserialize = 1
+            End Enum
+
+            Public Shared Sub LogBinaryFormatterEvent(className As String, operation As BinaryFormatterOperation, <CallerMemberName> Optional functionName As String = Nothing)
+                Dim userTask = New UserTaskEvent(BinaryFormatterEventName, TelemetryResult.Success)
+                userTask.Properties(BinaryFormatterPropertyNamePrefix + "functionname") = functionName
+                userTask.Properties(BinaryFormatterPropertyNamePrefix + "classname") = className
+                userTask.Properties(BinaryFormatterPropertyNamePrefix + "operation") = operation
                 TelemetryService.DefaultSession.PostEvent(userTask)
             End Sub
 
         End Class
 #End Region
+
+        Public Class ObjectSerializer
+
+            ' KnownType information is used by DataContractSerializer for serialization of types that it may not know of currently.
+            ' Size is used in Bitmap and has issues being recognized in DataContractSerializer for the unit tests of this class.
+            Private Shared ReadOnly s_knownTypes As Type() = {GetType(Size)}
+
+            Public Shared Sub Serialize(stream As Stream, value As Object)
+                Requires.NotNull(stream, NameOf(stream))
+                Requires.NotNull(value, NameOf(value))
+                Using writer As New BinaryWriter(stream, Encoding.UTF8, leaveOpen:=True)
+                    Dim valueType = value.GetType()
+                    writer.Write(valueType.AssemblyQualifiedName)
+                    writer.Flush()
+                    Call New DataContractSerializer(valueType, s_knownTypes).WriteObject(stream, value)
+                End Using
+            End Sub
+
+            Public Shared Function Deserialize(stream As Stream) As Object
+                Requires.NotNull(stream, NameOf(stream))
+                If stream.Length = 0 Then
+                    Throw New SerializationException("The stream contains no content.")
+                End If
+                Using reader As New BinaryReader(stream, Encoding.UTF8, leaveOpen:=True)
+                    Dim valueType = Type.GetType(reader.ReadString())
+                    Return New DataContractSerializer(valueType, s_knownTypes).ReadObject(stream)
+                End Using
+            End Function
+
+        End Class
+
     End Module
 End Namespace

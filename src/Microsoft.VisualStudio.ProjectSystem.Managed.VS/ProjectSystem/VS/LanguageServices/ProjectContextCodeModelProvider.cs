@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using EnvDTE;
 using Microsoft.VisualStudio.LanguageServices.ProjectSystem;
 using Microsoft.VisualStudio.ProjectSystem.LanguageServices;
+using TaskResult = Microsoft.VisualStudio.Threading.TaskResult;
 
 namespace Microsoft.VisualStudio.ProjectSystem.VS.LanguageServices
 {
@@ -29,7 +30,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.LanguageServices
             _projectContextHost = projectContextHost;
         }
 
-        public CodeModel GetCodeModel(Project project)
+        public CodeModel? GetCodeModel(Project project)
         {
             Requires.NotNull(project, nameof(project));
 
@@ -49,7 +50,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.LanguageServices
             });
         }
 
-        private async Task<CodeModel> GetCodeModelAsync(Project project)
+        private async Task<CodeModel?> GetCodeModelAsync(Project project)
         {
             await _threadingService.SwitchToUIThread();
 
@@ -73,7 +74,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.LanguageServices
                 {   // Isn't a file that Roslyn knows about
                 }
 
-                return Task.FromResult<FileCodeModel?>(null);
+                return TaskResult.Null<FileCodeModel>();
             });
         }
     }

@@ -8,6 +8,7 @@
 .vs/
 .vscode/
 .tools/
+/build/loc/Properties/launchSettings.json
 
 # Build results, but not the debug folder under projectsystem
 [Aa]rtifacts/
@@ -169,3 +170,5 @@ $RECYCLE.BIN/
 .DS_Store
 TRXUnit.zip
 RoslynTools.VSIXExpInstaller.zip
+*_wpftmp.csproj
+*_wpftmp.vbproj

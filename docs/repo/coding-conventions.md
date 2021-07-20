@@ -10,7 +10,7 @@ We use the same coding style conventions as outlined in [.NET Framework Coding S
 - **DO** favor private fields over private properties.
 - **DO** case internal fields as `PascalCased` not `_camelCased`.
 
-The majority of the guidelines, where possible, are enforced via the [.editorconfig](https://github.com/dotnet/project-system/blob/master/.editorconfig) in the root the repository.
+The majority of the guidelines, where possible, are enforced via the [.editorconfig](/.editorconfig) in the root the repository.
 
 ## MEF
 
@@ -52,7 +52,7 @@ For example, listening to data flow blocks from `IProjectSubscriptionService` an
 
 - **DO NOT** parse or attempt to reason about the values of properties that make up the dimensions for a project configuration; `$(Configuration)`, `$(Platform)` and `$(TargetFramework)`, and their plural counterparts; `$(Configurations)`, `$(Platforms)` and `$(TargetFrameworks)`.
 
-These properties are user "aliases" and should only be used for conditions, display and grouping purposes. Instead, the project system should be using their canonical equivalents; `$(PlatformTarget)` instead of `$(Platform)`, and `$(TargetFrameworkMoniker)` instead of `$(TargetFramework)`.
+These properties are user "aliases" and should only be used for conditions, display and grouping purposes. Instead, the project system should be using their canonical equivalents; `$(PlatformTarget)` instead of `$(Platform)`, and `$(TargetFrameworkMoniker)` and `$(TargetPlatformMoniker)` instead of `$(TargetFramework)`
 
 ## Threading
 

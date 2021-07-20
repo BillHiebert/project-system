@@ -28,7 +28,7 @@
         <note />
       </trans-unit>
       <trans-unit id="ContentType|WindowsResource|DisplayName">
-        <source>Windows Resourcs file</source>
+        <source>Windows Resource file</source>
         <target state="translated">Windows リソース ファイル</target>
         <note />
       </trans-unit>

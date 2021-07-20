@@ -25,6 +25,13 @@ namespace Microsoft.VisualStudio.ProjectSystem
                 PageTemplate = pageTemplate
             };
 
+            return CreateFromRule(schema, properties);
+        }
+
+        public static IRule CreateFromRule(
+            Rule? schema = null,
+            IEnumerable<IProperty>? properties = null)
+        {
             var rule = new Mock<IRule>();
 
             if (properties != null)
@@ -35,6 +42,19 @@ namespace Microsoft.VisualStudio.ProjectSystem
                         return properties.FirstOrDefault(p => p.Name == propertyName);
                     });
             }
+
+            if (schema != null)
+            {
+                rule.Setup(o => o.Schema)
+                    .Returns(schema);
+            }
+
+            return rule.Object;
+        }
+
+        public static IRule Create(Rule schema)
+        {
+            var rule = new Mock<IRule>();
 
             rule.Setup(o => o.Schema)
                 .Returns(schema);

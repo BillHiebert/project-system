@@ -88,7 +88,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.Tree.Dependencies.Subscriptions
                 "CrossTarget Joint Input: {1}",
                 SyncLink);
 
-            IDisposable SyncLink((BufferBlock<IProjectVersionedValue<IProjectSubscriptionUpdate>> Intermediate, ITargetBlock<IProjectVersionedValue<EventData>> Action) blocks)
+            IDisposable SyncLink((ISourceBlock<IProjectVersionedValue<IProjectSubscriptionUpdate>> Intermediate, ITargetBlock<IProjectVersionedValue<EventData>> Action) blocks)
             {
                 return ProjectDataSources.SyncLinkTo(
                     blocks.Intermediate.SyncLinkOptions(),
@@ -103,6 +103,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.Tree.Dependencies.Subscriptions
         protected override ProjectConfiguration GetProjectConfiguration(EventData e) => e.Item1.ProjectConfiguration;
 
         protected override void Handle(
+            string projectFullPath,
             AggregateCrossTargetProjectContext currentAggregateContext,
             TargetFramework targetFrameworkToUpdate,
             EventData e)
@@ -127,7 +128,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.Tree.Dependencies.Subscriptions
                 IProjectChangeDescription evaluation = projectUpdate.ProjectChanges[handler.Value.EvaluatedRuleName];
                 IProjectChangeDescription? build = projectUpdate.ProjectChanges.GetValueOrDefault(handler.Value.ResolvedRuleName);
 
-                handler.Value.Handle(evaluation, build, targetFrameworkToUpdate, changesBuilder);
+                handler.Value.Handle(projectFullPath, evaluation, build, targetFrameworkToUpdate, changesBuilder);
             }
 
             IDependenciesChanges? changes = changesBuilder.TryBuildChanges();

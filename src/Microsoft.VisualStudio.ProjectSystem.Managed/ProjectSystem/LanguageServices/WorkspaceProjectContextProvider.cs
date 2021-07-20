@@ -57,9 +57,6 @@ namespace Microsoft.VisualStudio.ProjectSystem.LanguageServices
         {
             Requires.NotNull(accessor, nameof(accessor));
 
-            // TODO: https://github.com/dotnet/project-system/issues/353.
-            await _threadingService.SwitchToUIThread();
-
             try
             {
                 accessor.Context.Dispose();
@@ -78,13 +75,16 @@ namespace Microsoft.VisualStudio.ProjectSystem.LanguageServices
             try
             {
                 // Call into Roslyn to init language service for this project
+#pragma warning disable 612,618
                 IWorkspaceProjectContext context = _workspaceProjectContextFactory.Value.CreateProjectContext(
                                                                                     data.LanguageName,
                                                                                     data.WorkspaceProjectContextId,
                                                                                     data.ProjectFilePath,
                                                                                     data.ProjectGuid,
                                                                                     hostObject,
-                                                                                    data.BinOutputPath);
+                                                                                    data.BinOutputPath,
+                                                                                    data.AssemblyName);
+#pragma warning restore 612,618
 
                 context.LastDesignTimeBuildSucceeded = false;  // By default, turn off diagnostics until the first design time build succeeds for this project.
 

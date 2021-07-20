@@ -55,6 +55,21 @@
         <target state="translated">Uwierzytelnianie systemu Windows</target>
         <note />
       </trans-unit>
+      <trans-unit id="latest">
+        <source>latest</source>
+        <target state="translated">najnowsze</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="none">
+        <source>none</source>
+        <target state="translated">brak</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="preview">
+        <source>preview</source>
+        <target state="translated">wersja zapoznawcza</target>
+        <note />
+      </trans-unit>
     </body>
   </file>
 </xliff>

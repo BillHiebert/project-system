@@ -5,6 +5,7 @@ using System.ComponentModel.Composition;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.LanguageServices.ProjectSystem;
+using Microsoft.VisualStudio.ProjectSystem.Build;
 
 namespace Microsoft.VisualStudio.ProjectSystem.LanguageServices
 {
@@ -12,10 +13,10 @@ namespace Microsoft.VisualStudio.ProjectSystem.LanguageServices
     ///     Responsible for creating and initializing <see cref="IWorkspaceProjectContext"/> and sending
     ///     on changes to the project to the <see cref="IApplyChangesToWorkspaceContext"/> service.
     /// </summary>
-    [Export(typeof(IImplicitlyActiveService))]
+    [Export(typeof(IImplicitlyActiveConfigurationComponent))]
     [Export(typeof(IWorkspaceProjectContextHost))]
     [AppliesTo(ProjectCapability.DotNetLanguageService)]
-    internal partial class WorkspaceProjectContextHost : AbstractMultiLifetimeComponent<WorkspaceProjectContextHost.WorkspaceProjectContextHostInstance>, IImplicitlyActiveService, IWorkspaceProjectContextHost
+    internal partial class WorkspaceProjectContextHost : AbstractMultiLifetimeComponent<WorkspaceProjectContextHost.WorkspaceProjectContextHostInstance>, IImplicitlyActiveConfigurationComponent, IWorkspaceProjectContextHost
     {
         private readonly ConfiguredProject _project;
         private readonly IProjectThreadingService _threadingService;
@@ -26,6 +27,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.LanguageServices
         private readonly IActiveConfiguredProjectProvider _activeConfiguredProjectProvider;
         private readonly ExportFactory<IApplyChangesToWorkspaceContext> _applyChangesToWorkspaceContextFactory;
         private readonly IDataProgressTrackerService _dataProgressTrackerService;
+        private readonly IProjectBuildSnapshotService _projectBuildSnapshotService;
 
         [ImportingConstructor]
         public WorkspaceProjectContextHost(ConfiguredProject project,
@@ -36,7 +38,8 @@ namespace Microsoft.VisualStudio.ProjectSystem.LanguageServices
                                            IActiveEditorContextTracker activeWorkspaceProjectContextTracker,
                                            IActiveConfiguredProjectProvider activeConfiguredProjectProvider,
                                            ExportFactory<IApplyChangesToWorkspaceContext> applyChangesToWorkspaceContextFactory,
-                                           IDataProgressTrackerService dataProgressTrackerService)
+                                           IDataProgressTrackerService dataProgressTrackerService,
+                                           IProjectBuildSnapshotService projectBuildSnapshotService)
             : base(threadingService.JoinableTaskContext)
         {
             _project = project;
@@ -48,6 +51,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.LanguageServices
             _activeConfiguredProjectProvider = activeConfiguredProjectProvider;
             _applyChangesToWorkspaceContextFactory = applyChangesToWorkspaceContextFactory;
             _dataProgressTrackerService = dataProgressTrackerService;
+            _projectBuildSnapshotService = projectBuildSnapshotService;
         }
 
         public Task ActivateAsync()
@@ -75,7 +79,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.LanguageServices
             await instance.OpenContextForWriteAsync(action);
         }
 
-        public async Task<T> OpenContextForWriteAsync<T>(Func<IWorkspaceProjectContextAccessor, Task<T>> action)
+        public async Task<T?> OpenContextForWriteAsync<T>(Func<IWorkspaceProjectContextAccessor, Task<T>> action)
         {
             Requires.NotNull(action, nameof(action));
 
@@ -96,7 +100,8 @@ namespace Microsoft.VisualStudio.ProjectSystem.LanguageServices
                 _activeWorkspaceProjectContextTracker,
                 _activeConfiguredProjectProvider,
                 _applyChangesToWorkspaceContextFactory,
-                _dataProgressTrackerService);
+                _dataProgressTrackerService,
+                _projectBuildSnapshotService);
         }
     }
 }

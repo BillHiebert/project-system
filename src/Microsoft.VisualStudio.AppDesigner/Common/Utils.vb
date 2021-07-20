@@ -4,7 +4,10 @@ Imports System.ComponentModel.Design
 Imports System.Drawing
 Imports System.IO
 Imports System.Reflection
+Imports System.Runtime.CompilerServices
 Imports System.Runtime.InteropServices
+Imports System.Runtime.Serialization
+Imports System.Text
 Imports System.Text.RegularExpressions
 Imports System.Windows.Forms
 
@@ -626,6 +629,12 @@ Namespace Microsoft.VisualStudio.Editors.AppDesCommon
             Private Const UNKNOWN_PAGE As Byte = &HFF
             Private Const DEFAULT_PAGE As Byte = 0
 
+            Private Const ProjectSystemEventNamePrefix As String = "vs/projectsystem/"
+            Private Const AppDesignerEventNamePrefix As String = ProjectSystemEventNamePrefix + "appdesigner/"
+
+            Private Const ProjectSystemPropertyNamePrefix As String = "vs.projectsystem."
+            Private Const AppDesignerPropertyNamePrefix As String = ProjectSystemPropertyNamePrefix + "appdesigner."
+
             ''' <summary>
             ''' Map a known property page or designer id to telemetry display name to log.
             ''' </summary>
@@ -643,27 +652,90 @@ Namespace Microsoft.VisualStudio.Editors.AppDesCommon
                 LogAppDesignerPageOpened(DEFAULT_PAGE)
             End Sub
 
-            Public Shared Sub LogAppDesignerPageOpened(pageGuid As Guid, Optional tabTitle As String = Nothing)
+            Public Shared Sub LogAppDesignerPageOpened(pageGuid As Guid, Optional tabTitle As String = Nothing, Optional alreadyOpened As Boolean = False)
                 Dim pageId = PageGuidToId(pageGuid)
-                LogAppDesignerPageOpened(pageId, pageGuid, tabTitle)
+                LogAppDesignerPageOpened(pageId, pageGuid, tabTitle, alreadyOpened)
             End Sub
 
-            Private Shared Sub LogAppDesignerPageOpened(pageId As Byte, Optional pageGuid As Guid? = Nothing, Optional tabTitle As String = Nothing)
-                Dim userTask = New UserTaskEvent("vs/projectsystem/appdesigner/page-opened", TelemetryResult.Success)
-                userTask.Properties("vs.projectsystem.appdesigner.page-opened") = pageId
+            Private Const PageOpenedEventName As String = AppDesignerEventNamePrefix + "page-opened"
+            Private Const PageOpenedPropertyName As String = AppDesignerPropertyNamePrefix + "page-opened"
+            Private Const PageOpenedPropertyNamePrefix As String = PageOpenedPropertyName + "."
+
+            Private Shared Sub LogAppDesignerPageOpened(pageId As Byte, Optional pageGuid As Guid? = Nothing, Optional tabTitle As String = Nothing, Optional alreadyOpened As Boolean = False)
+                Dim userTask = New UserTaskEvent(PageOpenedEventName, TelemetryResult.Success)
+                userTask.Properties(PageOpenedPropertyName) = pageId
 
                 If pageGuid IsNot Nothing Then
-                    userTask.Properties("vs.projectsystem.appdesigner.page-opened.pageguid") = pageGuid.Value.ToString()
+                    userTask.Properties(PageOpenedPropertyNamePrefix + "pageguid") = pageGuid.Value.ToString()
                 End If
 
                 If tabTitle IsNot Nothing Then
-                    userTask.Properties("vs.projectsystem.appdesigner.page-opened.tabtitle") = tabTitle
+                    userTask.Properties(PageOpenedPropertyNamePrefix + "tabtitle") = tabTitle
                 End If
+
+                userTask.Properties(PageOpenedPropertyNamePrefix + "alreadyopened") = alreadyOpened
 
                 TelemetryService.DefaultSession.PostEvent(userTask)
             End Sub
+
+            Private Const EditorCreationEventName As String = ProjectSystemEventNamePrefix + "propertiespages/createeditor"
+            Private Const EditorCreationPropertyNamePrefix As String = ProjectSystemPropertyNamePrefix + "propertiespages.createeditor."
+
+            Public Shared Sub LogEditorCreation(useNewEditor As Boolean, fileName As String, physicalView As String)
+                Dim telemetryEvent As TelemetryEvent = New TelemetryEvent(EditorCreationEventName)
+                telemetryEvent.Properties(EditorCreationPropertyNamePrefix + "UseNewEditor") = useNewEditor
+                telemetryEvent.Properties(EditorCreationPropertyNamePrefix + "FileName") = New TelemetryPiiProperty(fileName)
+                telemetryEvent.Properties(EditorCreationPropertyNamePrefix + "PhysicalView") = physicalView
+                TelemetryService.DefaultSession.PostEvent(telemetryEvent)
+            End Sub
+
+            Private Const BinaryFormatterEventName As String = AppDesignerEventNamePrefix + "binaryformatter"
+            Private Const BinaryFormatterPropertyNamePrefix As String = AppDesignerPropertyNamePrefix + "binaryformatter."
+            Public Enum BinaryFormatterOperation
+                Serialize = 0
+                Deserialize = 1
+            End Enum
+
+            Public Shared Sub LogBinaryFormatterEvent(className As String, operation As BinaryFormatterOperation, <CallerMemberName> Optional functionName As String = Nothing)
+                Dim userTask = New UserTaskEvent(BinaryFormatterEventName, TelemetryResult.Success)
+                userTask.Properties(BinaryFormatterPropertyNamePrefix + "functionname") = functionName
+                userTask.Properties(BinaryFormatterPropertyNamePrefix + "classname") = className
+                userTask.Properties(BinaryFormatterPropertyNamePrefix + "operation") = operation
+                TelemetryService.DefaultSession.PostEvent(userTask)
+            End Sub
+
         End Class
 #End Region
+
+        Public Class ObjectSerializer
+
+            ' KnownType information is used by DataContractSerializer for serialization of types that it may not know of currently.
+            ' Size is used in Bitmap and has issues being recognized in DataContractSerializer for the unit tests of this class.
+            Private Shared ReadOnly s_knownTypes As Type() = {GetType(Size)}
+
+            Public Shared Sub Serialize(stream As Stream, value As Object)
+                Requires.NotNull(stream, NameOf(stream))
+                Requires.NotNull(value, NameOf(value))
+                Using writer As New BinaryWriter(stream, Encoding.UTF8, leaveOpen:=True)
+                    Dim valueType = value.GetType()
+                    writer.Write(valueType.AssemblyQualifiedName)
+                    writer.Flush()
+                    Call New DataContractSerializer(valueType, s_knownTypes).WriteObject(stream, value)
+                End Using
+            End Sub
+
+            Public Shared Function Deserialize(stream As Stream) As Object
+                Requires.NotNull(stream, NameOf(stream))
+                If stream.Length = 0 Then
+                    Throw New SerializationException("The stream contains no content.")
+                End If
+                Using reader As New BinaryReader(stream, Encoding.UTF8, leaveOpen:=True)
+                    Dim valueType = Type.GetType(reader.ReadString())
+                    Return New DataContractSerializer(valueType, s_knownTypes).ReadObject(stream)
+                End Using
+            End Function
+
+        End Class
 
     End Module
 End Namespace

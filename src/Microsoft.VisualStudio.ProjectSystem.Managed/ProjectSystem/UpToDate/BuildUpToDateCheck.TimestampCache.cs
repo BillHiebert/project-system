@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.VisualStudio.IO;
 
@@ -22,6 +23,11 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 _timestampCache = new Dictionary<string, DateTime>(StringComparers.Paths);
             }
 
+            /// <summary>
+            /// Gets the number of unique files added to this cache.
+            /// </summary>
+            public int Count => _timestampCache.Count;
+
             public DateTime? GetTimestampUtc(string path)
             {
                 if (!_timestampCache.TryGetValue(path, out DateTime time))
@@ -38,7 +44,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.UpToDate
                 return time;
             }
 
-            public bool TryGetLatestInput(IEnumerable<string> inputs, [NotNullWhen(returnValue: true)] out string? latestPath, out DateTime latestTime)
+            public bool TryGetLatestInput(ImmutableArray<string> inputs, [NotNullWhen(returnValue: true)] out string? latestPath, out DateTime latestTime)
             {
                 latestTime = DateTime.MinValue;
                 latestPath = null;

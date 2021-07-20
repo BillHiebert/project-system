@@ -81,14 +81,14 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.TempPE
             _broadcastBlock = DataflowBlockSlim.CreateBroadcastBlock<IProjectVersionedValue<string[]>>(nameFormat: nameof(DesignTimeInputsFileWatcher) + "Broadcast {1}");
             _publicBlock = AllowSourceBlockCompletion ? _broadcastBlock : _broadcastBlock.SafePublicize();
 
-            _actionBlock = DataflowBlockFactory.CreateActionBlock<IProjectVersionedValue<DesignTimeInputs>>(ProcessDesignTimeInputs, _project);
+            _actionBlock = DataflowBlockFactory.CreateActionBlock<IProjectVersionedValue<DesignTimeInputs>>(ProcessDesignTimeInputsAsync, _project);
 
             _dataSourceLink = _designTimeInputsDataSource.SourceBlock.LinkTo(_actionBlock, DataflowOption.PropagateCompletion);
 
             JoinUpstreamDataSources(_designTimeInputsDataSource);
         }
 
-        private async Task ProcessDesignTimeInputs(IProjectVersionedValue<DesignTimeInputs> input)
+        private async Task ProcessDesignTimeInputsAsync(IProjectVersionedValue<DesignTimeInputs> input)
         {
             DesignTimeInputs designTimeInputs = input.Value;
 
@@ -131,7 +131,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.TempPE
         private void PublishFiles(string[] files)
         {
             _version++;
-            _broadcastBlock.Post(new ProjectVersionedValue<string[]>(
+            _broadcastBlock?.Post(new ProjectVersionedValue<string[]>(
                 files,
                 Empty.ProjectValueVersions.Add(DataSourceKey, _version)));
         }

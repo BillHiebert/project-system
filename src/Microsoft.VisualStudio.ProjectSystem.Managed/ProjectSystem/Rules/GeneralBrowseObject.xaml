@@ -333,7 +333,7 @@
                        Visible="False" />
 
   <DynamicEnumProperty Name="SupportedTargetFrameworks"
-                       EnumProvider="SupportedTargetFrameworksEnumProvider"
+                       EnumProvider="SupportedTargetFrameworkAliasEnumProvider"
                        Visible="False" />
 
   <IntProperty Name="TargetFramework"
@@ -345,6 +345,16 @@
                   SourceOfDefaultValue="AfterContext" />
     </IntProperty.DataSource>
   </IntProperty>
+
+  <StringProperty Name="FriendlyTargetFramework"
+                Visible="False">
+    <StringProperty.DataSource>
+      <DataSource HasConfigurationCondition="False"
+                PersistedName="TargetFramework"
+                Persistence="ProjectFile"
+                SourceOfDefaultValue="AfterContext" />
+    </StringProperty.DataSource>
+  </StringProperty>
 
   <StringProperty Name="TargetFrameworkMoniker"
                   Visible="False">

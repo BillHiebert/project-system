@@ -162,6 +162,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.PropertyPages
                         OnPropertyChanged(nameof(SupportsEnvironmentVariables));
                         OnPropertyChanged(nameof(SupportNativeDebugging));
                         OnPropertyChanged(nameof(SupportSqlDebugging));
+                        OnPropertyChanged(nameof(SupportJSWebView2Debugging));
                         OnPropertyChanged(nameof(ActiveProviderUserControl));
                         OnPropertyChanged(nameof(DoesNotHaveErrors));
                     }
@@ -344,6 +345,25 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.PropertyPages
             }
         }
 
+        public bool JSWebView2Debugging
+        {
+            get { return GetOtherProperty(LaunchProfileExtensions.JSWebView2DebuggingProperty, false); }
+            set
+            {
+                if (TrySetOtherProperty(LaunchProfileExtensions.JSWebView2DebuggingProperty, value, defaultValue: false))
+                {
+                    // If WebView2 debugging is selected, we will disable the checkboxes for Native and SQL debugging.
+                    // At the same time, also set their values to false, since we would ONLY be launching the JS Debugger
+                    if (value)
+                    {
+                        SqlDebugging = false;
+                        NativeCodeDebugging = false;
+                    }                 
+                    OnPropertyChanged(nameof(JSWebView2Debugging));
+                }
+            }
+        }
+
         private T GetOtherProperty<T>(string propertyName, T defaultValue)
         {
             if (!IsProfileSelected)
@@ -394,6 +414,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.PropertyPages
 
         public bool SupportNativeDebugging       => ActiveProviderSupportsProperty(UIProfilePropertyName.NativeDebugging);
         public bool SupportSqlDebugging          => ActiveProviderSupportsProperty(UIProfilePropertyName.SqlDebugging);
+        public bool SupportJSWebView2Debugging   => ActiveProviderSupportsProperty(UIProfilePropertyName.JSWebView2Debugging);
         public bool SupportsExecutable           => ActiveProviderSupportsProperty(UIProfilePropertyName.Executable);
         public bool SupportsArguments            => ActiveProviderSupportsProperty(UIProfilePropertyName.Arguments);
         public bool SupportsWorkingDirectory     => ActiveProviderSupportsProperty(UIProfilePropertyName.WorkingDirectory);
@@ -754,6 +775,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.PropertyPages
                 OnPropertyChanged(nameof(HasLaunchOption));
                 OnPropertyChanged(nameof(NativeCodeDebugging));
                 OnPropertyChanged(nameof(SqlDebugging));
+                OnPropertyChanged(nameof(JSWebView2Debugging));
                 OnPropertyChanged(nameof(WorkingDirectory));
                 OnPropertyChanged(nameof(RemoteDebugEnabled));
                 OnPropertyChanged(nameof(RemoteDebugMachine));
@@ -791,7 +813,7 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.PropertyPages
         /// Functions which actually does the save of the settings. Persists the changes to the launch settings
         /// file and configures IIS if needed.
         /// </summary>
-        public virtual async Task SaveLaunchSettings()
+        public virtual async Task SaveLaunchSettingsAsync()
         {
             ILaunchSettingsProvider provider = GetDebugProfileProvider();
             if (EnvironmentVariables?.Count > 0 && SelectedDebugProfile != null)
@@ -932,14 +954,14 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.PropertyPages
             {
                 ILaunchSettingsProvider profileProvider = GetDebugProfileProvider();
                 _debugProfileProviderLink = profileProvider.SourceBlock.LinkToAsyncAction(
-                    OnLaunchSettingsChanged,
+                    OnLaunchSettingsChangedAsync,
                     Project);
 
                 InitializeUIProviders();
             }
         }
 
-        private async Task OnLaunchSettingsChanged(ILaunchSettings profiles)
+        private async Task OnLaunchSettingsChangedAsync(ILaunchSettings profiles)
         {
             if (_firstSnapshotCompleteSource == null)
             {
@@ -981,14 +1003,14 @@ namespace Microsoft.VisualStudio.ProjectSystem.VS.PropertyPages
         /// <summary>
         /// Called when then the user saves the form.
         /// </summary>
-        public override async Task<int> Save()
+        public override async Task<int> SaveAsync()
         {
             if (HasErrors)
             {
                 throw new Exception(PropertyPageResources.ErrorsMustBeCorrectedPriorToSaving);
             }
 
-            await SaveLaunchSettings();
+            await SaveLaunchSettingsAsync();
 
             return HResult.OK;
         }

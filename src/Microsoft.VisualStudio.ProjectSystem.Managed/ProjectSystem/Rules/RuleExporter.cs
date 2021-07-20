@@ -23,6 +23,50 @@ namespace Microsoft.VisualStudio.ProjectSystem.Rules
             [AppliesTo(ProjectCapability.DotNet)]
             [Order(Order.Default)]
             public static int SourceControlRule;
+
+            /// <summary>
+            ///     Represents the evaluation items containing the supported (possible) target frameworks
+            ///     for a project.
+            /// </summary>
+            [ExportRule(nameof(SupportedTargetFrameworkAlias), PropertyPageContexts.ProjectSubscriptionService)]
+            [AppliesTo(ProjectCapability.DotNet)]
+            [Order(Order.Default)]
+            public static int SupportedTargetFrameworkAliasRule;
+
+            /// <summary>
+            ///     Represents the evaluation items containing the supported (possible) target frameworks
+            ///     for a project.
+            /// </summary>
+            [ExportRule(nameof(SupportedTargetFramework), PropertyPageContexts.ProjectSubscriptionService)]
+            [AppliesTo(ProjectCapability.DotNet)]
+            [Order(Order.Default)]
+            public static int SupportedTargetFrameworkRule;
+
+            /// <summary>
+            ///     Represents the evaluation items containing the supported (possible) target platforms
+            ///     for a project.
+            /// </summary>
+            [ExportRule(nameof(SdkSupportedTargetPlatformIdentifier), PropertyPageContexts.ProjectSubscriptionService)]
+            [AppliesTo(ProjectCapability.DotNet)]
+            [Order(Order.Default)]
+            public static int SdkSupportedTargetPlatformIdentifierRule;
+
+            /// <summary>
+            ///     Represents the evaluation items containing the supported (possible) target platforms
+            ///     versions for a project.
+            /// </summary>
+            [ExportRule(nameof(SdkSupportedTargetPlatformVersion), PropertyPageContexts.ProjectSubscriptionService)]
+            [AppliesTo(ProjectCapability.DotNet)]
+            [Order(Order.Default)]
+            public static int SdkSupportedTargetPlatformVersionRule;
+
+            /// <summary>
+            ///     Represents the evaluation properties containing the general configuration for a project.
+            /// </summary>
+            [ExportRule(nameof(ConfigurationGeneral), PropertyPageContexts.Project, PropertyPageContexts.ProjectSubscriptionService)]
+            [AppliesTo(ProjectCapability.DotNet)]
+            [Order(Order.Default)]
+            public static int ConfigurationGeneralRule;
         }
 
         private static class AppDesignerRules
